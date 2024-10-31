@@ -733,6 +733,7 @@ PresetManager::PresetManager(const std::string &presetsDirectory)
     : presetsPath(presetsDirectory), currentPresetIndex(0), hasInitialized(false)
 {
     createPresetsDirectoryIfNotExists();
+    initializeDefaultPreset();
     if (!loadPresets())
     {
         std::cerr << "Failed to load presets" << std::endl;
@@ -840,8 +841,6 @@ auto PresetManager::loadPresets() -> bool
 
         if (!foundPresets && !hasInitialized)
         {
-            loadedPresets = getDefaultPresets();
-            originalPresets = loadedPresets;
             saveDefaultPresets();
         }
 
@@ -2763,9 +2762,9 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
     ImGui::Spacing();
 
     // Get the current presets and create a vector of names
-    const auto &presets = g_presetManager->getPresets();
+    const std::vector<ModelPreset> &presets = g_presetManager->getPresets();
     std::vector<const char *> presetNames;
-    for (const auto &preset : presets)
+    for (const ModelPreset &preset : presets)
     {
         presetNames.push_back(preset.name.c_str());
     }
