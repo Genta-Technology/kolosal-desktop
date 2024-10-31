@@ -390,6 +390,7 @@ public:
     void handleUserMessage(const std::string &messageContent);
     void handleAssistantMessage(const std::string &messageContent);
 
+    auto getCurrentChatIndex() const -> int;
     auto getChatHistory(const int index) const -> ChatHistory;
     auto getChatHistoryCount() const -> int;
     auto getCurrentChatHistory() const -> ChatHistory;

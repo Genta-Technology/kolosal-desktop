@@ -651,6 +651,16 @@ auto ChatManager::decryptData(const std::string &data) -> std::string
 }
 
 /**
+ * @brief Gets the current chat index.
+ *
+ * @return int The current chat index.
+ */
+auto ChatManager::getCurrentChatIndex() const -> int
+{
+    return currentChatIndex;
+}
+
+/**
  * @brief Gets the chat history at the specified index.
  *
  * @param index The index of the chat history to get.
@@ -2496,6 +2506,11 @@ void ChatWindow::renderInputField(float inputHeight, float inputWidth)
 // [SECTION] Chat History Sidebar Rendering Functions
 //-----------------------------------------------------------------------------
 
+/**
+ * @brief Renders the chat history sidebar with the specified width.
+ *
+ * @param sidebarWidth The width of the sidebar.
+ */
 void ChatHistorySidebar::render(float &sidebarWidth)
 {
     ImGuiIO &io = ImGui::GetIO();
@@ -2528,9 +2543,9 @@ void ChatHistorySidebar::render(float &sidebarWidth)
         {
             g_chatManager->createNewChat();
         },
-        .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
+        .backgroundColor = RGBAToImVec4(26, 95, 180, 128),
         .hoverColor = RGBAToImVec4(53, 132, 228, 255),
-        .activeColor = RGBAToImVec4(26, 95, 180, 255)};
+        .activeColor = RGBAToImVec4(53, 132, 228, 255)};
 
     Widgets::Button::render(createNewChatButtonConfig);
 
@@ -2549,8 +2564,6 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 
     ImGui::Spacing();
 
-    const ChatHistory currentChatHistory = g_chatManager->getCurrentChatHistory();
-
     for (size_t i = 0; i < g_chatManager->getChatHistoryCount(); ++i)
     {
         const ChatHistory chat = g_chatManager->getChatHistory(i);
@@ -2565,12 +2578,8 @@ void ChatHistorySidebar::render(float &sidebarWidth)
             {
                 g_chatManager->switchChat(i);
             },
+            .state = (i == g_chatManager->getCurrentChatIndex()) ? ButtonState::ACTIVE : ButtonState::NORMAL,
             .alignment = Alignment::LEFT};
-
-        if (chat.id == currentChatHistory.id)
-        {
-            chatButtonConfig.state == ButtonState::ACTIVE;
-        }
 
         Widgets::Button::render(chatButtonConfig);
     }
