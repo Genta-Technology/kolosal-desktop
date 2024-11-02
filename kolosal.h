@@ -584,6 +584,7 @@ namespace ModelPresetSidebar
     void renderModelPresetsSelection(const float sidebarWidth);
     void renderSamplingSettings(const float sidebarWidth);
     void renderSaveAsDialog();
+    void confirmSaveAsDialog();
     void exportPresets();
 } // namespace ModelSettings
 

@@ -59,8 +59,11 @@ MarkdownFonts g_mdFonts;
 IconFonts g_iconFonts;
 std::unique_ptr<ChatManager> g_chatManager;
 std::unique_ptr<PresetManager> g_presetManager;
+
 // idk if this is the right way to do it
 // but it's the only way I can think of
+// should've useda static bool and char instead
+// but I'm too lazy to change it for now
 bool ModelPresetSidebar::State::g_showSaveAsDialog = false;
 char ModelPresetSidebar::State::g_newPresetName[256] = "";
 
@@ -2563,6 +2566,9 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 
     ImGui::Spacing();
 
+    // Render chat history buttons scroll region
+    ImGui::BeginChild("ChatHistoryButtons", ImVec2(sidebarWidth, ImGui::GetContentRegionAvail().y - 10), false, ImGuiWindowFlags_NoScrollbar);
+
     for (size_t i = 0; i < g_chatManager->getChatHistoryCount(); ++i)
     {
         const ChatHistory chat = g_chatManager->getChatHistory(i);
@@ -2582,6 +2588,8 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 
         Widgets::Button::render(chatButtonConfig);
     }
+
+    ImGui::EndChild();
 
     ImGui::End();
 }
@@ -2659,6 +2667,27 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
 }
 
 /**
+ * @brief Helper function to confirm the "Save Preset As" dialog.
+ * 
+ * This function is called when the user clicks the "Save" button or pressed enter in the dialog.
+ * It saves the current preset under the new name and closes the dialog.
+ */
+void ModelPresetSidebar::confirmSaveAsDialog()
+{
+    if (strlen(ModelPresetSidebar::State::g_newPresetName) > 0)
+    {
+        auto currentPreset = g_presetManager->getCurrentPreset();
+        currentPreset.name = ModelPresetSidebar::State::g_newPresetName;
+        if (g_presetManager->savePreset(currentPreset, true))
+        {
+            g_presetManager->loadPresets(); // Reload to include the new preset
+            ImGui::CloseCurrentPopup();
+            memset(ModelPresetSidebar::State::g_newPresetName, 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
+        }
+    }
+}
+
+/**
  * @brief Renders the "Save Preset As" dialog for saving a model preset under a new name.
  */
 void ModelPresetSidebar::renderSaveAsDialog()
@@ -2679,6 +2708,13 @@ void ModelPresetSidebar::renderSaveAsDialog()
     if (ImGui::BeginPopupModal("Save Preset As", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         static bool focusNewPresetName = true;
+
+        // input parameters is needed to process the input
+        auto processInput = [](const std::string &input)
+        {
+            confirmSaveAsDialog();
+        };
+
         // Set the new preset name to the current preset name by default
         if (strlen(ModelPresetSidebar::State::g_newPresetName) == 0)
         {
@@ -2688,7 +2724,7 @@ void ModelPresetSidebar::renderSaveAsDialog()
 
         Widgets::InputField::render(
             "##newpresetname", ModelPresetSidebar::State::g_newPresetName, ImVec2(250, 0),
-            "Enter new preset name...", 0, nullptr, focusNewPresetName);
+            "Enter new preset name...", ImGuiInputTextFlags_EnterReturnsTrue, processInput, focusNewPresetName);
 
         ImGui::Spacing();
 
@@ -2697,20 +2733,7 @@ void ModelPresetSidebar::renderSaveAsDialog()
             .label = "Save",
             .icon = std::nullopt,
             .size = ImVec2(122.5F, 0),
-            .onClick = []()
-            {
-                if (strlen(ModelPresetSidebar::State::g_newPresetName) > 0)
-                {
-                    auto currentPreset = g_presetManager->getCurrentPreset();
-                    currentPreset.name = ModelPresetSidebar::State::g_newPresetName;
-                    if (g_presetManager->savePreset(currentPreset, true))
-                    {
-                        g_presetManager->loadPresets(); // Reload to include the new preset
-                        ImGui::CloseCurrentPopup();
-                        memset(ModelPresetSidebar::State::g_newPresetName, 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
-                    }
-                }
-            },
+            .onClick = ModelPresetSidebar::confirmSaveAsDialog,
             .iconSolid = false,
             .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
             .hoverColor = RGBAToImVec4(53, 132, 228, 255),
