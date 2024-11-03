@@ -1676,7 +1676,7 @@ void Widgets::Label::render(const LabelConfig &config)
 }
 
 /**
- * @brief Sets the style for the input field.
+ * @brief Renders a label with the specified configuration inside a rectangle.
  *
  * @param config The configuration for the input field.
  * @param rectMin The minimum position of the rectangle.
@@ -1695,24 +1695,9 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     // Push a clipping rectangle to constrain rendering within the button
     ImGui::PushClipRect(rectMin, rectMax, true);
 
-    // Calculate the size of the label text if there is a label
-    ImVec2 labelSize(0, 0);
-    if (hasLabel)
-    {
-        if (config.isBold.value())
-        {
-            ImGui::PushFont(g_mdFonts.bold);
-        }
-        else
-        {
-            ImGui::PushFont(g_mdFonts.regular);
-        }
-        labelSize = ImGui::CalcTextSize(config.label.c_str());
-        ImGui::PopFont();
-    }
-
     // Calculate the size of the icon if present
     ImVec2 iconSize(0, 0);
+    float iconPlusGapWidth = 0.0f;
     if (hasIcon)
     {
         if (config.iconSolid.value())
@@ -1725,22 +1710,70 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
         }
         iconSize = ImGui::CalcTextSize(config.icon.value().c_str());
         ImGui::PopFont();
+        
+        // Add gap to icon width if we have both icon and label
+        iconPlusGapWidth = hasLabel ? (iconSize.x + config.gap.value_or(0.0f)) : iconSize.x;
+    }
+
+    // Calculate available width for label
+    float availableLabelWidth = rectSize.x - iconPlusGapWidth - (2 * config.gap.value_or(5.0f));
+
+    // Calculate label size and prepare truncated text if needed
+    ImVec2 labelSize(0, 0);
+    std::string truncatedLabel;
+    if (hasLabel)
+    {
+        if (config.isBold.value())
+        {
+            ImGui::PushFont(g_mdFonts.bold);
+        }
+        else
+        {
+            ImGui::PushFont(g_mdFonts.regular);
+        }
+        
+        labelSize = ImGui::CalcTextSize(config.label.c_str());
+        
+        // If label is too wide, we need to truncate it
+        if (labelSize.x > availableLabelWidth)
+        {
+            float ellipsisWidth = ImGui::CalcTextSize("...").x;
+            float targetWidth = availableLabelWidth - ellipsisWidth;
+            
+            // Binary search to find the right truncation point
+            int left = 0;
+            int right = config.label.length();
+            truncatedLabel = config.label;
+            
+            while (left < right)
+            {
+                int mid = (left + right + 1) / 2;
+                std::string testStr = config.label.substr(0, mid);
+                float testWidth = ImGui::CalcTextSize(testStr.c_str()).x;
+                
+                if (testWidth <= targetWidth)
+                {
+                    left = mid;
+                }
+                else
+                {
+                    right = mid - 1;
+                }
+            }
+            
+            truncatedLabel = config.label.substr(0, left) + "...";
+            labelSize = ImGui::CalcTextSize(truncatedLabel.c_str());
+        }
+        else
+        {
+            truncatedLabel = config.label;
+        }
+        
+        ImGui::PopFont();
     }
 
     // Calculate total content width and height
-    float contentWidth = 0.0f;
-    if (hasIcon && hasLabel)
-    {
-        contentWidth = iconSize.x + config.gap.value_or(0.0f) + labelSize.x;
-    }
-    else if (hasIcon)
-    {
-        contentWidth = iconSize.x;
-    }
-    else if (hasLabel)
-    {
-        contentWidth = labelSize.x;
-    }
+    float contentWidth = iconPlusGapWidth + labelSize.x;
     float contentHeight = std::max(labelSize.y, iconSize.y);
 
     // Calculate vertical offset to center content
@@ -1783,10 +1816,10 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
             ImGui::SameLine(0.0f, config.gap.value_or(0.0f));
         }
 
-        ImGui::PopFont(); // Pop icon font
+        ImGui::PopFont();
     }
 
-    // Render label text with specified font weight, if it exists
+    // Render truncated label text with specified font weight, if it exists
     if (hasLabel)
     {
         if (config.isBold.value())
@@ -1798,7 +1831,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
             ImGui::PushFont(g_mdFonts.regular);
         }
 
-        ImGui::TextUnformatted(config.label.c_str());
+        ImGui::TextUnformatted(truncatedLabel.c_str());
         ImGui::PopFont();
     }
 
