@@ -65,7 +65,7 @@ std::unique_ptr<PresetManager> g_presetManager;
 // should've useda static bool and char instead
 // but I'm too lazy to change it for now
 bool ModelPresetSidebar::State::g_showSaveAsDialog = false;
-char ModelPresetSidebar::State::g_newPresetName[256] = "";
+std::string ModelPresetSidebar::State::g_newPresetName(256, '\0');
 
 //-----------------------------------------------------------------------------
 // [SECTION] ChatManager Class Implementations
@@ -1111,7 +1111,7 @@ auto PresetManager::getPresetFilePath(const std::string &presetName) const -> st
  */
 auto PresetManager::isValidPresetName(const std::string &name) const -> bool
 {
-    if (name.empty() || name.length() > 255)
+    if (name.empty() || name.length() > 256) // 256 + 1 for null terminator
     {
         return false;
     }
@@ -1901,36 +1901,33 @@ void Widgets::InputField::handleSubmission(char *inputText, bool &focusInputFiel
  * @param processInput The function to process the input text.
  * @param focusInputField The flag to focus the input field.
  */
-void Widgets::InputField::renderMultiline(
-    const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
-    const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
-    const std::function<void(const std::string &)> &processInput, bool &focusInputField)
+void Widgets::InputField::renderMultiline(const InputFieldConfig &config)
 {
     // Set style
     Widgets::InputField::setStyle(Config::InputField::FRAME_ROUNDING, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y),
                                   Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR);
 
     // Set keyboard focus initially, then reset
-    if (focusInputField)
+    if (config.focusInputField)
     {
         ImGui::SetKeyboardFocusHere();
-        focusInputField = false;
+        config.focusInputField = false;
     }
 
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + inputSize.x - 15);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + config.size.x - 15);
 
     // Draw the input field
-    if (ImGui::InputTextMultiline(label, inputTextBuffer, Config::InputField::TEXT_SIZE, inputSize, inputFlags) && processInput)
+    if (ImGui::InputTextMultiline(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.size, config.flags.value()) && config.processInput.has_value())
     {
-        Widgets::InputField::handleSubmission(inputTextBuffer, focusInputField, processInput,
-                                              (inputFlags & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
-                                                  (inputFlags & ImGuiInputTextFlags_ShiftEnterForNewLine));
+        Widgets::InputField::handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput.value(),
+                                             (config.flags.value() & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
+                                             (config.flags.value() & ImGuiInputTextFlags_ShiftEnterForNewLine));
     }
 
     ImGui::PopTextWrapPos();
 
     // Draw placeholder if input is empty
-    if (strlen(inputTextBuffer) == 0)
+    if (strlen(config.inputTextBuffer.data()) == 0)
     {
         // Allow overlapping rendering
         ImGui::SetItemAllowOverlap();
@@ -1948,7 +1945,7 @@ void Widgets::InputField::renderMultiline(
         ImU32 placeholderColor = ImGui::GetColorU32(ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 
         // Calculate the maximum width for the placeholder text
-        float wrapWidth = inputSize.x - (2 * Config::FRAME_PADDING_X);
+        float wrapWidth = config.size.x - (2 * Config::FRAME_PADDING_X);
 
         // Render the placeholder text using AddText with wrapping
         drawList->AddText(
@@ -1956,7 +1953,7 @@ void Widgets::InputField::renderMultiline(
             ImGui::GetFontSize(),
             placeholderPos,
             placeholderColor,
-            placeholderText.c_str(),
+            config.placeholderText.value().c_str(),
             nullptr,
             wrapWidth);
     }
@@ -1976,30 +1973,27 @@ void Widgets::InputField::renderMultiline(
  * @param processInput The function to process the input text.
  * @param focusInputField The flag to focus the input field.
  */
-void Widgets::InputField::render(
-    const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
-    const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
-    const std::function<void(const std::string &)> &processInput, bool &focusInputField)
+void Widgets::InputField::render(const InputFieldConfig &config)
 {
     // Set style
     Widgets::InputField::setStyle(5.0F, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y),
                                   Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR);
 
     // Set keyboard focus initially, then reset
-    if (focusInputField)
+    if (config.focusInputField)
     {
         ImGui::SetKeyboardFocusHere();
-        focusInputField = false;
+        config.focusInputField = false;
     }
 
     // Draw the single-line input field
-    if (ImGui::InputText(label, inputTextBuffer, Config::InputField::TEXT_SIZE, inputFlags) && processInput)
+    if (ImGui::InputText(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.flags.value()) && config.processInput.has_value())
     {
-        Widgets::InputField::handleSubmission(inputTextBuffer, focusInputField, processInput, false);
+        Widgets::InputField::handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput.value(), false);
     }
 
     // Draw placeholder if input is empty
-    if (strlen(inputTextBuffer) == 0)
+    if (strlen(config.inputTextBuffer.data()) == 0)
     {
         // Allow overlapping rendering
         ImGui::SetItemAllowOverlap();
@@ -2018,7 +2012,7 @@ void Widgets::InputField::render(
         ImU32 placeholderColor = ImGui::GetColorU32(ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 
         // Render the placeholder text
-        drawList->AddText(placeholderPos, placeholderColor, placeholderText.c_str());
+        drawList->AddText(placeholderPos, placeholderColor, config.placeholderText.value().c_str());
     }
 
     // Restore original style
@@ -2517,24 +2511,29 @@ void ChatWindow::render(float inputHeight, float leftSidebarWidth, float rightSi
  */
 void ChatWindow::renderInputField(float inputHeight, float inputWidth)
 {
-    static std::array<char, Config::InputField::TEXT_SIZE> inputTextBuffer = {0};
+    static std::string inputTextBuffer(Config::InputField::TEXT_SIZE, '\0');
     static bool focusInputField = true;
 
     // Define the input size
     ImVec2 inputSize = ImVec2(inputWidth, inputHeight);
 
     // Define a lambda to process the submitted input
-    auto processInput = [](const std::string &input)
+    auto processInput = [&](const std::string &input)
     {
         g_chatManager->handleUserMessage(input);
         g_chatManager->handleAssistantMessage(input);
     };
 
     // Render the input field widget with a placeholder
-    Widgets::InputField::renderMultiline("##chatinput", inputTextBuffer.data(), inputSize,
-                                         "Type a message and press Enter to send (Ctrl+Enter or Shift+Enter for new line)",
-                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine | ImGuiInputTextFlags_ShiftEnterForNewLine,
-                                         processInput, focusInputField);
+    Widgets::InputField::renderMultiline(
+        InputFieldConfig{
+            .id = "##chatinput",
+            .size = inputSize,
+            .inputTextBuffer = inputTextBuffer,
+            .placeholderText = "Type a message and press Enter to send (Ctrl+Enter or Shift+Enter for new line)",
+            .flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine | ImGuiInputTextFlags_ShiftEnterForNewLine,
+            .processInput = processInput,
+            .focusInputField = focusInputField});
 }
 
 //-----------------------------------------------------------------------------
@@ -2662,16 +2661,16 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
 
     // Provide a processInput lambda to update the systemPrompt
     Widgets::InputField::renderMultiline(
-        "##systemprompt",
-        &currentPreset.systemPrompt[0], // Ensure mutable access
-        inputSize,
-        "Enter your system prompt here...",
-        0,
-        [&](const std::string &input)
-        {
-            currentPreset.systemPrompt = input; // Update the string with user input
-        },
-        focusSystemPrompt);
+        InputFieldConfig{
+            .id = "##systemprompt",
+            .size = inputSize,
+            .inputTextBuffer = currentPreset.systemPrompt, // Ensure mutable access
+            .placeholderText = "Enter your system prompt here...",
+            .processInput = [&](const std::string &input)
+            {
+                currentPreset.systemPrompt = input; // Update the string with user input
+            },
+            .focusInputField = focusSystemPrompt});
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -2707,15 +2706,15 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
  */
 void ModelPresetSidebar::confirmSaveAsDialog()
 {
-    if (strlen(ModelPresetSidebar::State::g_newPresetName) > 0)
+    if (strlen(ModelPresetSidebar::State::g_newPresetName.data()) > 0)
     {
         auto currentPreset = g_presetManager->getCurrentPreset();
-        currentPreset.name = ModelPresetSidebar::State::g_newPresetName;
+        currentPreset.name = ModelPresetSidebar::State::g_newPresetName.data();
         if (g_presetManager->savePreset(currentPreset, true))
         {
             g_presetManager->loadPresets(); // Reload to include the new preset
             ImGui::CloseCurrentPopup();
-            memset(ModelPresetSidebar::State::g_newPresetName, 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
+            memset(ModelPresetSidebar::State::g_newPresetName.data(), 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
         }
     }
 }
@@ -2749,15 +2748,25 @@ void ModelPresetSidebar::renderSaveAsDialog()
         };
 
         // Set the new preset name to the current preset name by default
-        if (strlen(ModelPresetSidebar::State::g_newPresetName) == 0)
+        if (strlen(ModelPresetSidebar::State::g_newPresetName.data()) == 0)
         {
-            strncpy(ModelPresetSidebar::State::g_newPresetName, g_presetManager->getCurrentPreset().name.c_str(), sizeof(ModelPresetSidebar::State::g_newPresetName));
+            strncpy(ModelPresetSidebar::State::g_newPresetName.data(), g_presetManager->getCurrentPreset().name.c_str(), sizeof(ModelPresetSidebar::State::g_newPresetName));
             ModelPresetSidebar::State::g_newPresetName[sizeof(ModelPresetSidebar::State::g_newPresetName) - 1] = '\0'; // Ensure null-terminated
         }
 
+        // Widgets::InputField::render(
+        //     "##newpresetname", ModelPresetSidebar::State::g_newPresetName, ImVec2(250, 0),
+        //     "Enter new preset name...", ImGuiInputTextFlags_EnterReturnsTrue, processInput, focusNewPresetName);
+
         Widgets::InputField::render(
-            "##newpresetname", ModelPresetSidebar::State::g_newPresetName, ImVec2(250, 0),
-            "Enter new preset name...", ImGuiInputTextFlags_EnterReturnsTrue, processInput, focusNewPresetName);
+            InputFieldConfig{
+                .id = "##newpresetname",
+                .size = ImVec2(250, 0),
+                .inputTextBuffer = ModelPresetSidebar::State::g_newPresetName,
+                .placeholderText = "Enter new preset name...",
+                .flags = ImGuiInputTextFlags_EnterReturnsTrue,
+                .processInput = processInput,
+                .focusInputField = focusNewPresetName});
 
         ImGui::Spacing();
 
@@ -2780,7 +2789,7 @@ void ModelPresetSidebar::renderSaveAsDialog()
             .onClick = []()
             {
                 ImGui::CloseCurrentPopup();
-                memset(ModelPresetSidebar::State::g_newPresetName, 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
+                memset(ModelPresetSidebar::State::g_newPresetName.data(), 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
             },
             .iconSolid = false,
             .backgroundColor = Config::Color::SECONDARY,

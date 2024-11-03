@@ -250,6 +250,17 @@ struct LabelConfig
     std::optional<Alignment> alignment = Alignment::CENTER;
 };
 
+struct InputFieldConfig
+{
+    std::string id;
+    ImVec2 size;
+    std::string &inputTextBuffer;
+    std::optional<std::string> placeholderText = "";
+    std::optional<ImGuiInputTextFlags> flags = ImGuiInputTextFlags_None;
+    std::optional<std::function<void(const std::string &)>> processInput;
+    bool &focusInputField;
+};
+
 /**
  * @brief A struct to store each model preset configuration.
  *
@@ -520,14 +531,8 @@ namespace Widgets
         void setStyle(float frameRounding, const ImVec2 &framePadding, const ImVec4 &bgColor, const ImVec4 &hoverColor, const ImVec4 &activeColor);
         void restoreStyle();
         void handleSubmission(char *inputText, bool &focusInputField, const std::function<void(const std::string &)> &processInput, bool clearInput);
-        void renderMultiline(
-            const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
-            const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
-            const std::function<void(const std::string &)> &processInput, bool &focusInputField);
-        void render(
-            const char *label, char *inputTextBuffer, const ImVec2 &inputSize,
-            const std::string &placeholderText, ImGuiInputTextFlags inputFlags,
-            const std::function<void(const std::string &)> &processInput, bool &focusInputField);
+        void renderMultiline(const InputFieldConfig &config);
+        void render(const InputFieldConfig &config);
     } // namespace InputField
 
     namespace Slider
@@ -577,7 +582,7 @@ namespace ModelPresetSidebar
     namespace State
     {
         extern bool g_showSaveAsDialog;
-        extern char g_newPresetName[256];
+        extern std::string g_newPresetName;
     }
 
     void render(float &sidebarWidth);
