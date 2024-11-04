@@ -1669,14 +1669,6 @@ void Widgets::Button::renderGroup(const std::vector<ButtonConfig> &buttons, floa
     ImGui::SetCursorPosX(startX);
     ImGui::SetCursorPosY(startY);
 
-    // Calculate total width of all buttons including spacing
-    float totalWidth = 0.0f;
-    for (const auto &button : buttons)
-    {
-        totalWidth += button.size.x;
-    }
-    totalWidth += spacing * (buttons.size() - 1);
-
     // Position each button and apply spacing
     float currentX = startX;
     for (size_t i = 0; i < buttons.size(); ++i)
@@ -1843,7 +1835,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
     float verticalOffset = rectMin.y + (rectSize.y - contentHeight) / 2.0f;
 
     // Calculate horizontal offset based on alignment
-    float horizontalOffset = rectMin.x; // Default to left alignment
+    float horizontalOffset;
     Alignment alignment = config.alignment.value_or(Alignment::LEFT);
     switch (alignment)
     {
