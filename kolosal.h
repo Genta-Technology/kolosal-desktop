@@ -250,6 +250,13 @@ struct LabelConfig
     std::optional<Alignment> alignment = Alignment::CENTER;
 };
 
+/**
+ * @brief A struct to store the configuration for an input field
+ *
+ * The InputFieldConfig struct stores the configuration for an input field, including the ID,
+ * size, input text buffer, placeholder text, flags, process input function, focus input field flag,
+ * frame rounding, padding, background color, hover color, active color, and text color.
+ */
 struct InputFieldConfig
 {
     std::string id;
@@ -259,6 +266,12 @@ struct InputFieldConfig
     std::optional<ImGuiInputTextFlags> flags = ImGuiInputTextFlags_None;
     std::optional<std::function<void(const std::string &)>> processInput;
     bool &focusInputField;
+    std::optional<float> frameRounding = Config::InputField::FRAME_ROUNDING;
+    std::optional<ImVec2> padding = ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y);
+    std::optional<ImVec4> backgroundColor = Config::InputField::INPUT_FIELD_BG_COLOR;
+    std::optional<ImVec4> hoverColor = Config::InputField::INPUT_FIELD_BG_COLOR;
+    std::optional<ImVec4> activeColor = Config::InputField::INPUT_FIELD_BG_COLOR;
+    std::optional<ImVec4> textColor = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
 };
 
 /**
@@ -393,6 +406,7 @@ public:
     void switchChat(int newIndex);
     auto hasUnsavedChanges() const -> bool;
     void resetCurrentChat();
+    auto renameCurrentChat(const std::string &newChatName) -> bool;
 
     auto getChatFilePath(const std::string &chatName) const -> std::string;
     auto isValidChatName(const std::string &name) const -> bool;
@@ -528,7 +542,7 @@ namespace Widgets
 
     namespace InputField
     {
-        void setStyle(float frameRounding, const ImVec2 &framePadding, const ImVec4 &bgColor, const ImVec4 &hoverColor, const ImVec4 &activeColor);
+        void setStyle(const InputFieldConfig &config);
         void restoreStyle();
         void handleSubmission(char *inputText, bool &focusInputField, const std::function<void(const std::string &)> &processInput, bool clearInput);
         void renderMultiline(const InputFieldConfig &config);
@@ -564,6 +578,7 @@ namespace ChatWindow
     void renderSidebar(float &sidebarWidth);
     void renderChatHistory(const ChatHistory chatHistory, float contentWidth);
     void renderInputField(float inputHeight, float inputWidth);
+    void renderRenameChatDialog(bool &showRenameChatDialog);
 
     namespace MessageBubble
     {
@@ -579,17 +594,11 @@ namespace ChatWindow
 
 namespace ModelPresetSidebar
 {
-    namespace State
-    {
-        extern bool g_showSaveAsDialog;
-        extern std::string g_newPresetName;
-    }
-
     void render(float &sidebarWidth);
     void renderModelPresetsSelection(const float sidebarWidth);
     void renderSamplingSettings(const float sidebarWidth);
-    void renderSaveAsDialog();
-    void confirmSaveAsDialog();
+    void renderSaveAsDialog(bool &showSaveAsDialog);
+    void confirmSaveAsDialog(std::string &newPresetName);
     void exportPresets();
 } // namespace ModelSettings
 

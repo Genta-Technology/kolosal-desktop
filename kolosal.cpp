@@ -60,13 +60,6 @@ IconFonts g_iconFonts;
 std::unique_ptr<ChatManager> g_chatManager;
 std::unique_ptr<PresetManager> g_presetManager;
 
-// idk if this is the right way to do it
-// but it's the only way I can think of
-// should've useda static bool and char instead
-// but I'm too lazy to change it for now
-bool ModelPresetSidebar::State::g_showSaveAsDialog = false;
-std::string ModelPresetSidebar::State::g_newPresetName(256, '\0');
-
 //-----------------------------------------------------------------------------
 // [SECTION] ChatManager Class Implementations
 //-----------------------------------------------------------------------------
@@ -516,6 +509,76 @@ void ChatManager::resetCurrentChat()
     {
         loadedChats[currentChatIndex] = originalChats[currentChatIndex];
     }
+}
+
+/**
+ * @brief Renames the current chat and saves it with the new name.
+ *
+ * This function renames the currently selected chat, saves it with the new name,
+ * and deletes the previous file with the old name.
+ *
+ * @param newChatName The new name for the current chat.
+ * @return bool True if the renaming was successful, false otherwise.
+ */
+auto ChatManager::renameCurrentChat(const std::string &newChatName) -> bool
+{
+    // Check if there is a current chat selected
+    if (currentChatIndex < 0 || currentChatIndex >= static_cast<int>(loadedChats.size()))
+    {
+        std::cerr << "No chat selected to rename." << std::endl;
+        return false;
+    }
+
+    // Validate the new chat name
+    if (!isValidChatName(newChatName))
+    {
+        std::cerr << "Invalid new chat name: " << newChatName << std::endl;
+        return false;
+    }
+
+    // Check if a chat with the new name already exists
+    auto it = std::find_if(loadedChats.begin(), loadedChats.end(),
+                           [&newChatName](const ChatHistory &chat)
+                           { return chat.name == newChatName; });
+    if (it != loadedChats.end())
+    {
+        std::cerr << "Chat name already exists: " << newChatName << std::endl;
+        return false;
+    }
+
+    // Get the current chat and its old file path
+    ChatHistory &currentChat = loadedChats[currentChatIndex];
+    std::string oldChatName = currentChat.name;
+    std::string oldFilePath = getChatFilePath(oldChatName);
+
+    // Update the chat's name and save it under the new name
+    currentChat.name = newChatName;
+    if (!saveChat(currentChat, true))
+    {
+        // Restore the old name if saving failed
+        currentChat.name = oldChatName;
+        std::cerr << "Failed to save chat with the new name: " << newChatName << std::endl;
+        return false;
+    }
+
+    // Delete the old file
+    try
+    {
+        if (std::filesystem::exists(oldFilePath))
+        {
+            std::filesystem::remove(oldFilePath);
+        }
+    }
+    catch (const std::filesystem::filesystem_error &e)
+    {
+        std::cerr << "Failed to delete old chat file: " << e.what() << std::endl;
+        return false;
+    }
+
+    // Also update the originalChats vector to keep it consistent
+    originalChats[currentChatIndex].name = newChatName;
+
+    return true;
 }
 
 /**
@@ -1710,7 +1773,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
         }
         iconSize = ImGui::CalcTextSize(config.icon.value().c_str());
         ImGui::PopFont();
-        
+
         // Add gap to icon width if we have both icon and label
         iconPlusGapWidth = hasLabel ? (iconSize.x + config.gap.value_or(0.0f)) : iconSize.x;
     }
@@ -1731,26 +1794,26 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
         {
             ImGui::PushFont(g_mdFonts.regular);
         }
-        
+
         labelSize = ImGui::CalcTextSize(config.label.c_str());
-        
+
         // If label is too wide, we need to truncate it
         if (labelSize.x > availableLabelWidth)
         {
             float ellipsisWidth = ImGui::CalcTextSize("...").x;
             float targetWidth = availableLabelWidth - ellipsisWidth;
-            
+
             // Binary search to find the right truncation point
             int left = 0;
             int right = config.label.length();
             truncatedLabel = config.label;
-            
+
             while (left < right)
             {
                 int mid = (left + right + 1) / 2;
                 std::string testStr = config.label.substr(0, mid);
                 float testWidth = ImGui::CalcTextSize(testStr.c_str()).x;
-                
+
                 if (testWidth <= targetWidth)
                 {
                     left = mid;
@@ -1760,7 +1823,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
                     right = mid - 1;
                 }
             }
-            
+
             truncatedLabel = config.label.substr(0, left) + "...";
             labelSize = ImGui::CalcTextSize(truncatedLabel.c_str());
         }
@@ -1768,7 +1831,7 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
         {
             truncatedLabel = config.label;
         }
-        
+
         ImGui::PopFont();
     }
 
@@ -1846,13 +1909,16 @@ void Widgets::Label::render(const LabelConfig &config, ImVec2 rectMin, ImVec2 re
  * @param framePadding The padding of the input field frame.
  * @param bgColor The background color of the input field.
  */
-void Widgets::InputField::setStyle(float frameRounding, const ImVec2 &framePadding, const ImVec4 &bgColor, const ImVec4 &hoverColor, const ImVec4 &activeColor)
+void Widgets::InputField::setStyle(const InputFieldConfig &config)
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, frameRounding);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, framePadding);
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, bgColor);
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, hoverColor);
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, activeColor);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, config.frameRounding.value());
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, config.padding.value());
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, config.backgroundColor.value());
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, config.hoverColor.value());
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, config.activeColor.value());
+
+    // Set text color
+    ImGui::PushStyleColor(ImGuiCol_Text, config.textColor.value());
 }
 
 /**
@@ -1860,7 +1926,7 @@ void Widgets::InputField::setStyle(float frameRounding, const ImVec2 &framePaddi
  */
 void Widgets::InputField::restoreStyle()
 {
-    ImGui::PopStyleColor(3); // Restore FrameBg
+    ImGui::PopStyleColor(4); // Restore FrameBg
     ImGui::PopStyleVar(2);   // Restore frame rounding and padding
 }
 
@@ -1904,8 +1970,7 @@ void Widgets::InputField::handleSubmission(char *inputText, bool &focusInputFiel
 void Widgets::InputField::renderMultiline(const InputFieldConfig &config)
 {
     // Set style
-    Widgets::InputField::setStyle(Config::InputField::FRAME_ROUNDING, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y),
-                                  Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR);
+    Widgets::InputField::setStyle(config);
 
     // Set keyboard focus initially, then reset
     if (config.focusInputField)
@@ -1920,8 +1985,8 @@ void Widgets::InputField::renderMultiline(const InputFieldConfig &config)
     if (ImGui::InputTextMultiline(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.size, config.flags.value()) && config.processInput.has_value())
     {
         Widgets::InputField::handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput.value(),
-                                             (config.flags.value() & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
-                                             (config.flags.value() & ImGuiInputTextFlags_ShiftEnterForNewLine));
+                                              (config.flags.value() & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
+                                                  (config.flags.value() & ImGuiInputTextFlags_ShiftEnterForNewLine));
     }
 
     ImGui::PopTextWrapPos();
@@ -1976,8 +2041,7 @@ void Widgets::InputField::renderMultiline(const InputFieldConfig &config)
 void Widgets::InputField::render(const InputFieldConfig &config)
 {
     // Set style
-    Widgets::InputField::setStyle(5.0F, ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y),
-                                  Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR, Config::InputField::INPUT_FIELD_BG_COLOR);
+    Widgets::InputField::setStyle(config);
 
     // Set keyboard focus initially, then reset
     if (config.focusInputField)
@@ -1985,6 +2049,9 @@ void Widgets::InputField::render(const InputFieldConfig &config)
         ImGui::SetKeyboardFocusHere();
         config.focusInputField = false;
     }
+
+    // set size of input field
+    ImGui::PushItemWidth(config.size.x);
 
     // Draw the single-line input field
     if (ImGui::InputText(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.flags.value()) && config.processInput.has_value())
@@ -2439,6 +2506,102 @@ void ChatWindow::renderChatHistory(const ChatHistory chatHistory, float contentW
 }
 
 /**
+ * @brief Renders the rename chat dialog.
+ *
+ * @param showRenameChatDialog A boolean reference to control the visibility of the dialog.
+ */
+void ChatWindow::renderRenameChatDialog(bool &showRenameChatDialog)
+{
+    if (showRenameChatDialog)
+    {
+        ImGui::OpenPopup("Rename Chat");
+
+        // Reset the flag to prevent the dialog from opening multiple times
+        showRenameChatDialog = false;
+    }
+
+    // Change the window title background color
+    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.125F, 0.125F, 0.125F, 1.0F));       // Inactive state color
+    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
+
+    // Apply rounded corners to the window
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+
+    if (ImGui::BeginPopupModal("Rename Chat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        static bool focusNewChatName = true;
+        static std::string newChatName(256, '\0');
+
+        // input parameters is needed to process the input
+        auto processInput = [](const std::string &input)
+        {
+            g_chatManager->renameCurrentChat(input);
+            ImGui::CloseCurrentPopup();
+            memset(newChatName.data(), 0, sizeof(newChatName));
+        };
+
+        // Set the new chat name to the current chat name by default
+        if (strlen(newChatName.data()) == 0)
+        {
+            strncpy(newChatName.data(), g_chatManager->getCurrentChatHistory().name.c_str(), sizeof(newChatName));
+            newChatName[sizeof(newChatName) - 1] = '\0'; // Ensure null-terminated
+        }
+
+        Widgets::InputField::render(
+            InputFieldConfig{
+                .id = "##newchatname",
+                .size = ImVec2(250, 0),
+                .inputTextBuffer = newChatName,
+                .placeholderText = "Enter new chat name...",
+                .flags = ImGuiInputTextFlags_EnterReturnsTrue,
+                .processInput = processInput,
+                .focusInputField = focusNewChatName,
+                .frameRounding = 5.0F});
+
+        ImGui::Spacing();
+
+        ButtonConfig confirmRename{
+            .id = "##confirmRename",
+            .label = "Rename",
+            .icon = std::nullopt,
+            .size = ImVec2(122.5F, 0),
+            .onClick = []()
+            {
+                g_chatManager->renameCurrentChat(newChatName);
+                ImGui::CloseCurrentPopup();
+                memset(newChatName.data(), 0, sizeof(newChatName));
+            },
+            .iconSolid = false,
+            .backgroundColor = RGBAToImVec4(26, 95, 180, 255),
+            .hoverColor = RGBAToImVec4(53, 132, 228, 255),
+            .activeColor = RGBAToImVec4(26, 95, 180, 255)};
+        ButtonConfig cancelRename{
+            .id = "##cancelRename",
+            .label = "Cancel",
+            .icon = std::nullopt,
+            .size = ImVec2(122.5F, 0),
+            .onClick = []()
+            {
+                ImGui::CloseCurrentPopup();
+                memset(newChatName.data(), 0, sizeof(newChatName));
+            },
+            .iconSolid = false,
+            .backgroundColor = Config::Color::SECONDARY,
+            .hoverColor = Config::Color::PRIMARY,
+            .activeColor = Config::Color::SECONDARY};
+
+        std::vector<ButtonConfig> renameChatDialogButtons = {confirmRename, cancelRename};
+        Widgets::Button::renderGroup(renameChatDialogButtons, ImGui::GetCursorPosX(), ImGui::GetCursorPosY(), 10);
+
+        ImGui::EndPopup();
+    }
+
+    // Revert to the previous style
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar();
+}
+
+/**
  * @brief Renders the chat window to cover the full width and height of the application window,
  *        minus the sidebar width.
  *
@@ -2471,6 +2634,37 @@ void ChatWindow::render(float inputHeight, float leftSidebarWidth, float rightSi
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float contentWidth = (availableWidth < Config::CHAT_WINDOW_CONTENT_WIDTH) ? availableWidth : Config::CHAT_WINDOW_CONTENT_WIDTH;
     float paddingX = (availableWidth - contentWidth) / 2.0F;
+    float renameButtonWidth = 128.0F;
+
+    // Center the rename button horizontally
+    if (paddingX > 0.0F)
+    {
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX + (contentWidth - renameButtonWidth) / 2.0F);
+    }
+
+    static bool showRenameChatDialog = false;
+
+    // Render the rename button
+    ButtonConfig renameButtonConfig{
+        .id = "##renameChat",
+        .label = g_chatManager->getCurrentChatHistory().name,
+        .icon = ICON_FA_PEN,
+        .size = ImVec2(renameButtonWidth, 0),
+        .gap = 10.0F,
+        .onClick = []()
+        {
+            showRenameChatDialog = true;
+        }};
+
+    Widgets::Button::render(renameButtonConfig);
+
+    // Render the rename chat dialog
+    ChatWindow::renderRenameChatDialog(showRenameChatDialog);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::Spacing();
+    ImGui::Spacing();
 
     // Center the content horizontally
     if (paddingX > 0.0F)
@@ -2700,21 +2894,21 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
 
 /**
  * @brief Helper function to confirm the "Save Preset As" dialog.
- * 
+ *
  * This function is called when the user clicks the "Save" button or pressed enter in the dialog.
  * It saves the current preset under the new name and closes the dialog.
  */
-void ModelPresetSidebar::confirmSaveAsDialog()
+void ModelPresetSidebar::confirmSaveAsDialog(std::string &newPresetName)
 {
-    if (strlen(ModelPresetSidebar::State::g_newPresetName.data()) > 0)
+    if (strlen(newPresetName.data()) > 0)
     {
         auto currentPreset = g_presetManager->getCurrentPreset();
-        currentPreset.name = ModelPresetSidebar::State::g_newPresetName.data();
+        currentPreset.name = newPresetName.data();
         if (g_presetManager->savePreset(currentPreset, true))
         {
             g_presetManager->loadPresets(); // Reload to include the new preset
             ImGui::CloseCurrentPopup();
-            memset(ModelPresetSidebar::State::g_newPresetName.data(), 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
+            memset(newPresetName.data(), 0, sizeof(newPresetName));
         }
     }
 }
@@ -2722,12 +2916,12 @@ void ModelPresetSidebar::confirmSaveAsDialog()
 /**
  * @brief Renders the "Save Preset As" dialog for saving a model preset under a new name.
  */
-void ModelPresetSidebar::renderSaveAsDialog()
+void ModelPresetSidebar::renderSaveAsDialog(bool &showSaveAsDialog)
 {
-    if (ModelPresetSidebar::State::g_showSaveAsDialog)
+    if (showSaveAsDialog)
     {
         ImGui::OpenPopup("Save Preset As");
-        ModelPresetSidebar::State::g_showSaveAsDialog = false;
+        showSaveAsDialog = false;
     }
 
     // Change the window title background color
@@ -2740,33 +2934,31 @@ void ModelPresetSidebar::renderSaveAsDialog()
     if (ImGui::BeginPopupModal("Save Preset As", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         static bool focusNewPresetName = true;
+        static std::string newPresetName(256, '\0');
 
         // input parameters is needed to process the input
         auto processInput = [](const std::string &input)
         {
-            confirmSaveAsDialog();
+            confirmSaveAsDialog(newPresetName);
         };
 
         // Set the new preset name to the current preset name by default
-        if (strlen(ModelPresetSidebar::State::g_newPresetName.data()) == 0)
+        if (strlen(newPresetName.data()) == 0)
         {
-            strncpy(ModelPresetSidebar::State::g_newPresetName.data(), g_presetManager->getCurrentPreset().name.c_str(), sizeof(ModelPresetSidebar::State::g_newPresetName));
-            ModelPresetSidebar::State::g_newPresetName[sizeof(ModelPresetSidebar::State::g_newPresetName) - 1] = '\0'; // Ensure null-terminated
+            strncpy(newPresetName.data(), g_presetManager->getCurrentPreset().name.c_str(), sizeof(newPresetName));
+            newPresetName[sizeof(newPresetName) - 1] = '\0'; // Ensure null-terminated
         }
-
-        // Widgets::InputField::render(
-        //     "##newpresetname", ModelPresetSidebar::State::g_newPresetName, ImVec2(250, 0),
-        //     "Enter new preset name...", ImGuiInputTextFlags_EnterReturnsTrue, processInput, focusNewPresetName);
 
         Widgets::InputField::render(
             InputFieldConfig{
                 .id = "##newpresetname",
                 .size = ImVec2(250, 0),
-                .inputTextBuffer = ModelPresetSidebar::State::g_newPresetName,
+                .inputTextBuffer = newPresetName,
                 .placeholderText = "Enter new preset name...",
                 .flags = ImGuiInputTextFlags_EnterReturnsTrue,
                 .processInput = processInput,
-                .focusInputField = focusNewPresetName});
+                .focusInputField = focusNewPresetName,
+                .frameRounding = 5.0F});
 
         ImGui::Spacing();
 
@@ -2775,7 +2967,10 @@ void ModelPresetSidebar::renderSaveAsDialog()
             .label = "Save",
             .icon = std::nullopt,
             .size = ImVec2(122.5F, 0),
-            .onClick = ModelPresetSidebar::confirmSaveAsDialog,
+            .onClick = []()
+            {
+                confirmSaveAsDialog(newPresetName);
+            },
             .iconSolid = false,
             .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
             .hoverColor = RGBAToImVec4(53, 132, 228, 255),
@@ -2789,7 +2984,7 @@ void ModelPresetSidebar::renderSaveAsDialog()
             .onClick = []()
             {
                 ImGui::CloseCurrentPopup();
-                memset(ModelPresetSidebar::State::g_newPresetName.data(), 0, sizeof(ModelPresetSidebar::State::g_newPresetName));
+                memset(newPresetName.data(), 0, sizeof(newPresetName));
             },
             .iconSolid = false,
             .backgroundColor = Config::Color::SECONDARY,
@@ -2907,6 +3102,9 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
         .hoverColor = RGBAToImVec4(53, 132, 228, 255),
         .activeColor = RGBAToImVec4(26, 95, 180, 255)};
 
+    
+    static bool showSaveAsDialog = false;
+
     ButtonConfig saveAsNewButton{
         .id = "##saveasnew",
         .label = "Save as New",
@@ -2914,7 +3112,7 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
         .size = ImVec2(sidebarWidth / 2 - 15, 0),
         .onClick = []()
         {
-            ModelPresetSidebar::State::g_showSaveAsDialog = true;
+            showSaveAsDialog = true;
         }};
 
     std::vector<ButtonConfig> buttons = {saveButton, saveAsNewButton};
@@ -2923,7 +3121,7 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
     ImGui::Spacing();
     ImGui::Spacing();
 
-    ModelPresetSidebar::renderSaveAsDialog();
+    ModelPresetSidebar::renderSaveAsDialog(showSaveAsDialog);
 }
 
 /**
