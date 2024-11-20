@@ -75,10 +75,13 @@ in vec2 TexCoord;
 out vec4 FragColor;
 
 uniform sampler2D gradientTexture;
+uniform float uTransitionProgress;
 
 void main()
 {
-    FragColor = texture(gradientTexture, TexCoord);
+    vec4 color = texture(gradientTexture, TexCoord);
+    color.a *= uTransitionProgress; // Adjust the alpha based on transition progress
+    FragColor = color;
 }
 )";
 
@@ -1895,6 +1898,14 @@ void mainLoop(HWND hwnd) {
     // Setup full-screen quad
     setupFullScreenQuad();
 
+    // Transition variables
+    float transitionProgress = 0.0f;
+    const float transitionDuration = 0.3f; // Duration in seconds
+    bool isTransitioning = false;
+    bool targetActiveState = g_borderlessWindow->isActive();
+    std::chrono::steady_clock::time_point transitionStartTime;
+    bool previousActiveState = g_borderlessWindow->isActive();
+
     MSG msg = { 0 };
     const double targetFrameTime = 1.0 / 30.0; // Target frame time in seconds (for 30 FPS)
 
@@ -1907,6 +1918,37 @@ void mainLoop(HWND hwnd) {
             continue;
         }
 
+        // Detect active state changes
+        bool currentActiveState = g_borderlessWindow->isActive();
+        if (currentActiveState != previousActiveState) {
+            isTransitioning = true;
+            targetActiveState = currentActiveState;
+            transitionStartTime = std::chrono::steady_clock::now();
+        }
+        previousActiveState = currentActiveState;
+
+        // Update transition progress
+        if (isTransitioning) {
+            float elapsedTime = std::chrono::duration<float>(std::chrono::steady_clock::now() - transitionStartTime).count();
+            float progress = elapsedTime / transitionDuration;
+            if (progress >= 1.0f) {
+                progress = 1.0f;
+                isTransitioning = false;
+            }
+            if (targetActiveState) {
+                transitionProgress = progress; // Fading in
+            }
+            else {
+                transitionProgress = 1.0f - progress; // Fading out
+            }
+        }
+        else {
+            transitionProgress = targetActiveState ? 1.0f : 0.0f;
+        }
+
+        // Optional: Apply easing function
+        float easedProgress = transitionProgress * transitionProgress * (3.0f - 2.0f * transitionProgress);
+
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -1918,7 +1960,8 @@ void mainLoop(HWND hwnd) {
         ChatWindow::render(inputHeight, chatHistorySidebarWidth, modelPresetSidebarWidth);
 
         // Draw the blue border if the window is active
-        if (g_borderlessWindow->isActive()) {
+        if (g_borderlessWindow->isActive()) 
+        {
             ImDrawList* draw_list = ImGui::GetForegroundDrawList();
             ImGuiIO& io = ImGui::GetIO();
             float thickness = 2.0f;
@@ -1964,8 +2007,13 @@ void mainLoop(HWND hwnd) {
         glDisable(GL_DEPTH_TEST);
         glDisable(GL_CULL_FACE);
 
-        // Draw the gradient texture as background
+        // Render the gradient texture as background
+        if (transitionProgress > 0.0f)
         {
+            // Enable blending
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
             // Use the shader program
             glUseProgram(shaderProgram);
 
@@ -1976,6 +2024,10 @@ void mainLoop(HWND hwnd) {
             // Set the sampler uniform
             glUniform1i(glGetUniformLocation(shaderProgram, "gradientTexture"), 0);
 
+            // Set the transition progress uniform
+            GLint locTransitionProgress = glGetUniformLocation(shaderProgram, "uTransitionProgress");
+            glUniform1f(locTransitionProgress, easedProgress); // Use easedProgress
+
             // Render the full-screen quad
             glBindVertexArray(g_quadVAO);
             glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -1983,6 +2035,9 @@ void mainLoop(HWND hwnd) {
 
             // Unbind the shader program
             glUseProgram(0);
+
+            // Disable blending if necessary
+            // glDisable(GL_BLEND);
         }
 
         // Render ImGui draw data
