@@ -27,6 +27,13 @@
 #ifndef KOLOSAL_H
 #define KOLOSAL_H
 
+#define NOMINMAX
+#include <windows.h>
+#include <windowsx.h>
+#include <glad/glad.h>
+#include <gl/gl.h>
+#include <dwmapi.h>
+#include <memory>
 #include <string>
 #include <vector>
 #include <chrono>
@@ -36,8 +43,12 @@
 #include <array>
 #include <optional>
 #include <filesystem>
+
 #include "nfd.h"
 #include "imgui.h"
+#include "imgui_impl_win32.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_internal.h"
 #include "IconsFontAwesome5.h"
 #include "IconsFontAwesome5Brands.h"
 #include "json.hpp"
@@ -70,10 +81,10 @@ namespace Config
 
     namespace BackgroundColor
     {
-        constexpr float R = 0.1F;
-        constexpr float G = 0.1F;
-        constexpr float B = 0.1F;
-        constexpr float A = 1.0F;
+        constexpr float R = 0.05F;
+        constexpr float G = 0.07F;
+        constexpr float B = 0.12F;
+        constexpr float A = 1.00F;
     } // namespace BackgroundColor
 
     namespace UserColor
@@ -127,7 +138,7 @@ namespace Config
 
     namespace Color
     {
-        constexpr ImVec4 TRANSPARENT = ImVec4(0.0F, 0.0F, 0.0F, 0.0F);
+        constexpr ImVec4 TRANSPARENT_COL = ImVec4(0.0F, 0.0F, 0.0F, 0.0F);
         constexpr ImVec4 PRIMARY = ImVec4(0.3F, 0.3F, 0.3F, 0.5F);
         constexpr ImVec4 SECONDARY = ImVec4(0.3F, 0.3F, 0.3F, 0.3F);
         constexpr ImVec4 DISABLED = ImVec4(0.3F, 0.3F, 0.3F, 0.1F);
@@ -223,7 +234,7 @@ struct ButtonConfig
     std::optional<float> gap = 5.0F;
     std::function<void()> onClick;
     std::optional<bool> iconSolid;
-    std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT;
+    std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT_COL;
     std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
     std::optional<ButtonState> state = ButtonState::NORMAL;
@@ -261,18 +272,30 @@ struct InputFieldConfig
 {
     std::string id;
     ImVec2 size;
-    std::string &inputTextBuffer;
+    std::string& inputTextBuffer;
+    bool& focusInputField;
     std::optional<std::string> placeholderText = "";
     std::optional<ImGuiInputTextFlags> flags = ImGuiInputTextFlags_None;
-    std::optional<std::function<void(const std::string &)>> processInput;
-    bool &focusInputField;
+    std::optional<std::function<void(const std::string&)>> processInput;
     std::optional<float> frameRounding = Config::InputField::FRAME_ROUNDING;
     std::optional<ImVec2> padding = ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y);
     std::optional<ImVec4> backgroundColor = Config::InputField::INPUT_FIELD_BG_COLOR;
     std::optional<ImVec4> hoverColor = Config::InputField::INPUT_FIELD_BG_COLOR;
     std::optional<ImVec4> activeColor = Config::InputField::INPUT_FIELD_BG_COLOR;
     std::optional<ImVec4> textColor = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
+
+    // **Constructor**
+    InputFieldConfig(
+        const std::string& id,
+        const ImVec2& size,
+        std::string& inputTextBuffer,
+        bool& focusInputField)
+        : id(id),
+        size(size),
+        inputTextBuffer(inputTextBuffer),
+        focusInputField(focusInputField) {}
 };
+
 
 /**
  * @brief A struct to store each model preset configuration.
@@ -313,9 +336,10 @@ struct ModelPreset
         float top_k = 50.0f,
         int random_seed = 42,
         float min_length = 0.0f,
-        float max_new_tokens = 2048.0f) : id(id), lastModified(lastModified), name(name), systemPrompt(systemPrompt), temperature(temperature),
-                                          top_p(top_p), top_k(top_k), random_seed(random_seed),
-                                          min_length(min_length), max_new_tokens(max_new_tokens) {}
+        float max_new_tokens = 2048.0f) : 
+        id(id), lastModified(lastModified), name(name), systemPrompt(systemPrompt), temperature(temperature),
+        top_p(top_p), top_k(top_k), random_seed(random_seed),
+        min_length(min_length), max_new_tokens(max_new_tokens) {}
 };
 
 /**
@@ -369,9 +393,16 @@ struct ChatHistory
 
 // Forward declaration of GLFWwindow to avoid including GLFW/glfw3.h
 struct GLFWwindow;
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // Forward declaration of global variables
 
+// Window and OpenGL context
+extern std::unique_ptr<class BorderlessWindow> g_borderlessWindow;
+extern HGLRC                                    g_openglContext;
+extern HDC                                      g_deviceContext;
+
+// ImGui context
 extern MarkdownFonts                        g_mdFonts;
 extern IconFonts                            g_iconFonts;
 extern std::unique_ptr<class ChatManager>   g_chatManager;
@@ -380,6 +411,69 @@ extern std::unique_ptr<class PresetManager> g_presetManager;
 //-----------------------------------------------------------------------------
 // [SECTION] Classes
 //-----------------------------------------------------------------------------
+
+/**
+ * @brief A class to create and manage a borderless window.
+ *
+ * The BorderlessWindow class provides functionality to create a window without borders,
+ * and allows enabling or disabling borderless mode, borderless shadow, resizing, and dragging.
+ */
+class BorderlessWindow 
+{
+public:
+    /**
+     * @brief Constructs a new BorderlessWindow object.
+     */
+    BorderlessWindow();
+
+    /**
+     * @brief Sets the borderless mode of the window.
+     *
+     * @param enabled True to enable borderless mode, false to disable it.
+     */
+    auto set_borderless(bool enabled) -> void;
+
+    /**
+     * @brief Sets the borderless shadow of the window.
+     *
+     * @param enabled True to enable borderless shadow, false to disable it.
+     */
+    auto set_borderless_shadow(bool enabled) -> void;
+
+	/**
+	 * @brief get the current state of the window
+     */
+    bool isActive() const { return is_active; }
+
+    HWND handle;                    ///< Handle to the window.
+private:
+    /**
+     * @brief Window procedure for handling window messages.
+     *
+     * @param hwnd Handle to the window.
+     * @param msg The message.
+     * @param wparam Additional message information.
+     * @param lparam Additional message information.
+     * @return LRESULT The result of the message processing.
+     */
+    static auto CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) noexcept -> LRESULT;
+
+    /**
+     * @brief Performs hit testing to determine the location of the cursor.
+     *
+     * @param cursor The cursor position.
+     * @return LRESULT The result of the hit test.
+     */
+    auto hit_test(POINT cursor) const->LRESULT;
+
+    bool borderless = true;         ///< Indicates if the window is currently borderless.
+    bool borderless_resize = true;  ///< Indicates if the window allows resizing by dragging the borders while borderless.
+    bool borderless_drag = true;    ///< Indicates if the window allows moving by dragging the client area.
+    bool borderless_shadow = true;  ///< Indicates if the window displays a native aero shadow while borderless.
+
+	bool is_active = true;		    ///< Indicates if the window is currently active.
+};
+
 
 /**
  * @brief A class to manage the chat history
@@ -486,15 +580,14 @@ private:
 // [SECTION] Function Prototypes
 //-----------------------------------------------------------------------------
 
-// Initialization and Cleanup Functions
-auto initializeGLFW() -> bool;
-auto createWindow() -> GLFWwindow *;
-auto initializeGLAD() -> bool;
-auto LoadIconFont(ImGuiIO &io, const char *iconFontPath, float fontSize) -> ImFont *;
-auto LoadFont(ImGuiIO &imguiIO, const char *fontPath, ImFont *fallbackFont, float fontSize) -> ImFont *;
-void setupImGui(GLFWwindow *window);
-void mainLoop(GLFWwindow *window);
-void cleanup(GLFWwindow *window);
+// fonts and icons initialization
+auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*;
+auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*;
+
+bool initializeOpenGL(HWND hwnd);
+void setupImGui(HWND hwnd);
+void mainLoop(HWND hwnd);
+void cleanup();
 
 //-----------------------------------------------------------------------------
 // [SECTION] Utility Functions

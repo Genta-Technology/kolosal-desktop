@@ -33,6 +33,8 @@
 
 # vs
 .vscode/*
+.vs/*
 
 # build folder
 build/*
+out/*

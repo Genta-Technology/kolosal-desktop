@@ -6,9 +6,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable compile_commands.json generation
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Set OpenGL preference
-set(OpenGL_GL_PREFERENCE GLVND)
-
 # Find OpenGL
 find_package(OpenGL REQUIRED)
 if(NOT OpenGL_FOUND)
@@ -17,23 +14,11 @@ else()
     message(STATUS "Found OpenGL: ${OpenGL_INCLUDE_DIR}")
 endif()
 
-# GLFW options
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-
-# Wayland and X11 options
-option(GLFW_BUILD_WAYLAND "Build GLFW with Wayland support" ON)
-option(GLFW_BUILD_X11 "Build GLFW with X11 support" ON)
-
-# Add GLFW
-add_subdirectory(external/glfw)
-
 # Add GLAD
 add_library(glad STATIC external/glad/src/glad.c)
 target_include_directories(glad PUBLIC external/glad/include)
 
-# Add NFD
+# Add NFD (Native File Dialog Extended)
 add_subdirectory(external/nativefiledialog-extended)
 
 # Add ImGui source files
@@ -44,7 +29,7 @@ set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp   # Changed to Win32 backend
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
@@ -55,25 +40,47 @@ add_library(kolosal_lib STATIC kolosal.cpp ${IMGUI_SOURCES})
 target_include_directories(kolosal_lib PUBLIC
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
-    ${OPENGL_INCLUDE_DIR}
+    ${OpenGL_INCLUDE_DIR}
     external/glad/include
     external/icons
     external/nlohmann
-    external/nativefiledialog-extended/src/include  # Corrected path to NFD
+    external/nativefiledialog-extended/src/include
+    # Removed external/glfw/include since GLFW is no longer used
 )
 
 # Link libraries to Kolosal library
-target_link_libraries(kolosal_lib PUBLIC
-    glfw
-    ${OPENGL_LIBRARIES}
-    glad
-    nfd  # Make sure to link the NFD library
-)
+if (WIN32)
+    target_link_libraries(kolosal_lib PUBLIC
+        ${OpenGL_LIBRARIES}
+        glad
+        nfd
+        Dwmapi
+        UxTheme
+        Shcore
+        opengl32   # Ensure OpenGL library is linked
+        user32
+        gdi32
+        shell32
+    )
+else()
+    target_link_libraries(kolosal_lib PUBLIC
+        ${OpenGL_LIBRARIES}
+        glad
+        nfd
+    )
+endif()
 
-# Add compile definitions for ImGui
-target_compile_definitions(kolosal_lib PUBLIC
-    IMGUI_IMPL_OPENGL_LOADER_GLAD
-)
+# Add compile definitions for ImGui and Windows
+if (WIN32)
+    target_compile_definitions(kolosal_lib PUBLIC
+        IMGUI_IMPL_OPENGL_LOADER_GLAD
+        UNICODE
+    )
+else()
+    target_compile_definitions(kolosal_lib PUBLIC
+        IMGUI_IMPL_OPENGL_LOADER_GLAD
+    )
+endif()
 
 # Define the font paths relative to the executable
 set(FONT_FILE_INTER_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Regular.ttf")
@@ -104,11 +111,12 @@ add_executable(KolosalDesktop main.cpp)
 target_include_directories(KolosalDesktop PRIVATE
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
-    ${OPENGL_INCLUDE_DIR}
+    ${OpenGL_INCLUDE_DIR}
     external/glad/include
     external/icons
     external/nlohmann
-    external/nativefiledialog-extended/src/include  # Corrected path for NFD
+    external/nativefiledialog-extended/src/include
+    # Removed external/glfw/include since GLFW is no longer used
 )
 
 # Link libraries to the main executable

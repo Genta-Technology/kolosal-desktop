@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2024, Rifky Bujana Bisri.  All rights reserved.
  *
  * This file is part of Genta Technology.
@@ -25,40 +25,29 @@
  */
 
 #include "kolosal.h"
+
 #include <iostream>
 #include <cstring>
+#include <stdexcept>
+#include <system_error>
 #include <sstream>
 #include <iomanip>
 #include <array>
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include <fstream>
 #include <ctime>
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include "imgui_internal.h"
-
-using json = json;
-
-//-----------------------------------------------------------------------------
-// [SECTION] Constants and Configurations
-//-----------------------------------------------------------------------------
-
-namespace Config
-{
-    // Using the same constants as defined in kolosal.h
-    // Ensuring consistency between header and source files
-    using namespace ::Config; // Importing all from Config namespace
-}
 
 //-----------------------------------------------------------------------------
 // [SECTION] Global Variables
 //-----------------------------------------------------------------------------
 
-MarkdownFonts g_mdFonts;
-IconFonts g_iconFonts;
-std::unique_ptr<ChatManager> g_chatManager;
-std::unique_ptr<PresetManager> g_presetManager;
+std::unique_ptr<BorderlessWindow> g_borderlessWindow;
+HGLRC                             g_openglContext = nullptr;
+HDC                               g_deviceContext = nullptr;
+
+MarkdownFonts                     g_mdFonts;
+IconFonts                         g_iconFonts;
+std::unique_ptr<ChatManager>      g_chatManager;
+std::unique_ptr<PresetManager>    g_presetManager;
 
 //-----------------------------------------------------------------------------
 // [SECTION] ChatManager Class Implementations
@@ -1206,68 +1195,289 @@ void PresetManager::saveDefaultPresets()
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
-// [SECTION] GLFW and OpenGL Initialization Functions
+// [SECTION] Borderless Window Class
 //-----------------------------------------------------------------------------
 
-/**
- * @brief Initializes the GLFW library.
- *
- * @return true if the GLFW library is successfully initialized, false otherwise.
- */
-auto initializeGLFW() -> bool
+namespace 
 {
-    if (glfwInit() == GLFW_FALSE)
+    // we cannot just use WS_POPUP style
+    // WS_THICKFRAME: without this the window cannot be resized and so aero snap, de-maximizing and minimizing won't work
+    // WS_SYSMENU: enables the context menu with the move, close, maximize, minize... commands (shift + right-click on the task bar item)
+    // WS_CAPTION: enables aero minimize animation/transition
+    // WS_MAXIMIZEBOX, WS_MINIMIZEBOX: enable minimize/maximize
+    enum class Style : DWORD 
     {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return false;
+        windowed = WS_OVERLAPPEDWINDOW | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX,
+        aero_borderless = WS_POPUP | WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX,
+        basic_borderless = WS_POPUP | WS_THICKFRAME | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX
+    };
+
+    auto maximized(HWND hwnd) -> bool 
+    {
+        WINDOWPLACEMENT placement;
+        if (!::GetWindowPlacement(hwnd, &placement)) 
+        {
+            return false;
+        }
+
+        return placement.showCmd == SW_MAXIMIZE;
     }
-    return true;
+
+    /* Adjust client rect to not spill over monitor edges when maximized.
+     * rect(in/out): in: proposed window rect, out: calculated client rect
+     * Does nothing if the window is not maximized.
+     */
+    auto adjust_maximized_client_rect(HWND window, RECT& rect) -> void 
+    {
+        if (!maximized(window)) 
+        {
+            return;
+        }
+
+        auto monitor = ::MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
+        if (!monitor) 
+        {
+            return;
+        }
+
+        MONITORINFO monitor_info{};
+        monitor_info.cbSize = sizeof(monitor_info);
+        if (!::GetMonitorInfoW(monitor, &monitor_info)) 
+        {
+            return;
+        }
+
+        // when maximized, make the client area fill just the monitor (without task bar) rect,
+        // not the whole window rect which extends beyond the monitor.
+        rect = monitor_info.rcWork;
+    }
+
+    auto last_error(const std::string& message) -> std::system_error 
+    {
+        return std::system_error(
+            std::error_code(::GetLastError(), std::system_category()),
+            message
+        );
+    }
+
+    auto window_class(WNDPROC wndproc) -> const wchar_t* 
+    {
+        static const wchar_t* window_class_name = [&] {
+            WNDCLASSEXW wcx{};
+            wcx.cbSize = sizeof(wcx);
+            wcx.style = CS_HREDRAW | CS_VREDRAW;
+            wcx.hInstance = nullptr;
+            wcx.lpfnWndProc = wndproc;
+            wcx.lpszClassName = L"BorderlessWindowClass";
+            wcx.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+            wcx.hCursor = ::LoadCursorW(nullptr, IDC_ARROW);
+            const ATOM result = ::RegisterClassExW(&wcx);
+            if (!result) {
+                throw last_error("failed to register window class");
+            }
+            return wcx.lpszClassName;
+            }();
+        return window_class_name;
+    }
+
+    auto composition_enabled() -> bool 
+    {
+        BOOL composition_enabled = FALSE;
+        bool success = ::DwmIsCompositionEnabled(&composition_enabled) == S_OK;
+        return composition_enabled && success;
+    }
+
+    auto select_borderless_style() -> Style 
+    {
+        return composition_enabled() ? Style::aero_borderless : Style::basic_borderless;
+    }
+
+    auto set_shadow(HWND handle, bool enabled) -> void 
+    {
+        if (composition_enabled()) 
+        {
+            static const MARGINS shadow_state[2]{ { 0,0,0,0 },{ 1,1,1,1 } };
+            ::DwmExtendFrameIntoClientArea(handle, &shadow_state[enabled]);
+        }
+    }
+
+    auto create_window(WNDPROC wndproc, void* userdata) -> HWND 
+    {
+        auto handle = CreateWindowExW(
+            0, window_class(wndproc), L"Borderless Window",
+            static_cast<DWORD>(Style::aero_borderless), CW_USEDEFAULT, CW_USEDEFAULT,
+            1280, 720, nullptr, nullptr, nullptr, userdata
+        );
+        if (!handle) 
+        {
+            throw last_error("failed to create window");
+        }
+        return handle;
+    }
 }
 
-/**
- * @brief Creates a GLFW window with an OpenGL context.
- *
- * @return A pointer to the created GLFW window, or nullptr if creation fails.
- */
-auto createWindow() -> GLFWwindow *
+BorderlessWindow::BorderlessWindow()
+    : handle{ create_window(&BorderlessWindow::WndProc, this) },
+    borderless_drag{ false },
+    borderless_resize{ true }
 {
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    constexpr int WINDOW_WIDTH = 800;
-    constexpr int WINDOW_HEIGHT = 600;
-    GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Kolosal AI", nullptr, nullptr);
-    if (window == nullptr)
-    {
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        glfwTerminate();
-        return nullptr;
-    }
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync
-
-    return window;
+    set_borderless(borderless);
+    set_borderless_shadow(borderless_shadow);
+    ::ShowWindow(handle, SW_SHOW);
 }
 
-/**
- * @brief Initializes the GLAD library to load OpenGL function pointers.
- *
- * @return true if GLAD is successfully initialized, false otherwise.
- */
-auto initializeGLAD() -> bool
+void BorderlessWindow::set_borderless(bool enabled) 
 {
-    if (gladLoadGLLoader((GLADloadproc)glfwGetProcAddress) == 0)
+    Style new_style = (enabled) ? select_borderless_style() : Style::windowed;
+    Style old_style = static_cast<Style>(::GetWindowLongPtrW(handle, GWL_STYLE));
+
+    if (new_style != old_style) 
     {
-        std::cerr << "Failed to initialize GLAD" << std::endl;
-        return false;
+        borderless = enabled;
+
+        ::SetWindowLongPtrW(handle, GWL_STYLE, static_cast<LONG>(new_style));
+
+        // when switching between borderless and windowed, restore appropriate shadow state
+        set_shadow(handle, borderless_shadow && (new_style != Style::windowed));
+
+        // redraw frame
+        ::SetWindowPos(handle, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE);
+        ::ShowWindow(handle, SW_SHOW);
     }
-    return true;
+}
+
+void BorderlessWindow::set_borderless_shadow(bool enabled) 
+{
+    if (borderless) 
+    {
+        borderless_shadow = enabled;
+        set_shadow(handle, enabled);
+    }
+}
+
+LRESULT CALLBACK BorderlessWindow::WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) noexcept 
+{
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) 
+    {
+        return true;
+    }
+
+    if (msg == WM_NCCREATE) 
+    {
+        auto userdata = reinterpret_cast<CREATESTRUCTW*>(lparam)->lpCreateParams;
+        ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(userdata));
+    }
+    if (auto window_ptr = reinterpret_cast<BorderlessWindow*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA))) 
+    {
+        auto& window = *window_ptr;
+
+        switch (msg) 
+        {
+        case WM_NCCALCSIZE: 
+        {
+            if (wparam == TRUE && window.borderless) 
+            {
+                auto& params = *reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+                adjust_maximized_client_rect(hwnd, params.rgrc[0]);
+                return 0;
+            }
+            break;
+        }
+        case WM_NCHITTEST: 
+        {
+            if (window.borderless) 
+            {
+                return window.hit_test(POINT{
+                    GET_X_LPARAM(lparam),
+                    GET_Y_LPARAM(lparam)
+                    });
+            }
+            break;
+        }
+        case WM_NCACTIVATE: 
+        {
+            window.is_active = (wparam != FALSE);
+            break;
+        }
+        case WM_ACTIVATE: 
+        {
+            window.is_active = (wparam != WA_INACTIVE);
+            break;
+        }
+        case WM_CLOSE: 
+        {
+            ::DestroyWindow(hwnd);
+            return 0;
+        }
+        case WM_DESTROY: 
+        {
+            PostQuitMessage(0);
+            return 0;
+        }
+        case WM_SIZE: 
+        {
+            // Handle window resizing if necessary
+            return 0;
+        }
+        default:
+            break;
+        }
+    }
+
+    return ::DefWindowProcW(hwnd, msg, wparam, lparam);
+}
+
+auto BorderlessWindow::hit_test(POINT cursor) const -> LRESULT {
+    // Identify borders and corners to allow resizing the window.
+    int titleBarHeight = 30; // Adjust based on your UI layout
+    const POINT border{
+        ::GetSystemMetrics(SM_CXFRAME) + ::GetSystemMetrics(SM_CXPADDEDBORDER),
+        ::GetSystemMetrics(SM_CYFRAME) + ::GetSystemMetrics(SM_CXPADDEDBORDER)
+    };
+    RECT window;
+    if (!::GetWindowRect(handle, &window)) {
+        return HTNOWHERE;
+    }
+
+    // Check if the cursor is within the custom title bar
+    if (cursor.y >= window.top && cursor.y < window.top + titleBarHeight) {
+        return HTCAPTION;
+    }
+
+    const auto drag = HTCLIENT; // Always return HTCLIENT for client area
+
+    enum region_mask {
+        client = 0b0000,
+        left = 0b0001,
+        right = 0b0010,
+        top = 0b0100,
+        bottom = 0b1000,
+    };
+
+    const auto result =
+        left * (cursor.x < (window.left + border.x)) |
+        right * (cursor.x >= (window.right - border.x)) |
+        top * (cursor.y < (window.top + border.y)) |
+        bottom * (cursor.y >= (window.bottom - border.y));
+
+    switch (result) {
+    case left: return borderless_resize ? HTLEFT : HTCLIENT;
+    case right: return borderless_resize ? HTRIGHT : HTCLIENT;
+    case top: return borderless_resize ? HTTOP : HTCLIENT;
+    case bottom: return borderless_resize ? HTBOTTOM : HTCLIENT;
+    case top | left: return borderless_resize ? HTTOPLEFT : HTCLIENT;
+    case top | right: return borderless_resize ? HTTOPRIGHT : HTCLIENT;
+    case bottom | left: return borderless_resize ? HTBOTTOMLEFT : HTCLIENT;
+    case bottom | right: return borderless_resize ? HTBOTTOMRIGHT : HTCLIENT;
+    case client: return HTCLIENT; // Ensure client area is not draggable
+    default: return HTNOWHERE;
+    }
 }
 
 //-----------------------------------------------------------------------------
-// [SECTION] ImGui Setup and Main Loop
+// [SECTION] Font and Icon Font Loading Functions
 //-----------------------------------------------------------------------------
+
 
 /**
  * @brief Loads a font from a file and adds it to the ImGui context.
@@ -1281,9 +1491,9 @@ auto initializeGLAD() -> bool
  *
  * This function loads a font from a file and adds it to the ImGui context.
  */
-auto LoadFont(ImGuiIO &imguiIO, const char *fontPath, ImFont *fallbackFont, float fontSize) -> ImFont *
+auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*
 {
-    ImFont *font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
+    ImFont* font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
     if (font == nullptr)
     {
         std::cerr << "Failed to load font: " << fontPath << std::endl;
@@ -1302,9 +1512,9 @@ auto LoadFont(ImGuiIO &imguiIO, const char *fontPath, ImFont *fallbackFont, floa
  *
  * This function loads an icon font from a file and adds it to the ImGui context.
  */
-auto LoadIconFont(ImGuiIO &io, const char *iconFontPath, float fontSize) -> ImFont *
+auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*
 {
-    static const ImWchar icons_ranges[] = {ICON_MIN_FA, ICON_MAX_FA, 0};
+    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
     ImFontConfig icons_config;
     icons_config.MergeMode = true;            // Enable merging
     icons_config.PixelSnapH = true;           // Enable pixel snapping
@@ -1317,7 +1527,7 @@ auto LoadIconFont(ImGuiIO &io, const char *iconFontPath, float fontSize) -> ImFo
     }
 
     // Load and merge icon font
-    ImFont *iconFont = io.Fonts->AddFontFromFileTTF(iconFontPath, fontSize, &icons_config, icons_ranges);
+    ImFont* iconFont = io.Fonts->AddFontFromFileTTF(iconFontPath, fontSize, &icons_config, icons_ranges);
     if (iconFont == nullptr)
     {
         std::cerr << "Failed to load icon font: " << iconFontPath << std::endl;
@@ -1327,18 +1537,93 @@ auto LoadIconFont(ImGuiIO &io, const char *iconFontPath, float fontSize) -> ImFo
     return iconFont;
 }
 
+//-----------------------------------------------------------------------------
+// [SECTION] GLFW and OpenGL Initialization Functions
+//-----------------------------------------------------------------------------
+
+bool initializeOpenGL(HWND hwnd) 
+{
+    PIXELFORMATDESCRIPTOR pfd = 
+    {
+        sizeof(PIXELFORMATDESCRIPTOR),   // Size Of This Pixel Format Descriptor
+        1,                               // Version Number
+        PFD_DRAW_TO_WINDOW |             // Format Must Support Window
+        PFD_SUPPORT_OPENGL |             // Format Must Support OpenGL
+        PFD_DOUBLEBUFFER,                // Must Support Double Buffering
+        PFD_TYPE_RGBA,                   // Request An RGBA Format
+        32,                              // Select Our Color Depth
+        0, 0, 0, 0, 0, 0,                // Color Bits Ignored
+        0,                               // No Alpha Buffer
+        0,                               // Shift Bit Ignored
+        0,                               // No Accumulation Buffer
+        0, 0, 0, 0,                      // Accumulation Bits Ignored
+        24,                              // 24Bit Z-Buffer (Depth Buffer)
+        8,                               // 8Bit Stencil Buffer
+        0,                               // No Auxiliary Buffer
+        PFD_MAIN_PLANE,                  // Main Drawing Layer
+        0,                               // Reserved
+        0, 0, 0                          // Layer Masks Ignored
+    };
+
+    g_deviceContext = GetDC(hwnd);
+    if (!g_deviceContext) 
+    {
+        MessageBoxA(nullptr, "Failed to get device context", "Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    int pixelFormat = ChoosePixelFormat(g_deviceContext, &pfd);
+    if (pixelFormat == 0) 
+    {
+        MessageBoxA(nullptr, "Failed to choose pixel format", "Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    if (!SetPixelFormat(g_deviceContext, pixelFormat, &pfd)) 
+    {
+        MessageBoxA(nullptr, "Failed to set pixel format", "Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    g_openglContext = wglCreateContext(g_deviceContext);
+    if (!g_openglContext) 
+    {
+        MessageBoxA(nullptr, "Failed to create OpenGL context", "Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    if (!wglMakeCurrent(g_deviceContext, g_openglContext)) 
+    {
+        MessageBoxA(nullptr, "Failed to make OpenGL context current", "Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    // Initialize GLAD or any OpenGL loader here
+    if (!gladLoadGL()) 
+    {
+        MessageBoxA(nullptr, "Failed to initialize GLAD", "Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    return true;
+}
+
+
+//-----------------------------------------------------------------------------
+// [SECTION] ImGui Setup and Main Loop
+//-----------------------------------------------------------------------------
+
 /**
  * @brief Sets up the ImGui context and initializes the platform/renderer backends.
  *
  * @param window A pointer to the GLFW window.
  */
-void setupImGui(GLFWwindow *window)
-{
+void setupImGui(HWND hwnd) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO &imguiIO = ImGui::GetIO();
+    ImGuiIO& imguiIO = ImGui::GetIO();
 
-    // Set up the ImGui style
+    // Load fonts and set up styles
     g_mdFonts.regular = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR, imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
     g_mdFonts.bold = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
     g_mdFonts.italic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
@@ -1352,8 +1637,15 @@ void setupImGui(GLFWwindow *window)
 
     imguiIO.FontDefault = g_mdFonts.regular;
 
+    // Adjust ImGui style to match the window's rounded corners
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = 8.0f; // Match the corner radius
+    style.WindowBorderSize = 0.0f; // Disable ImGui's window border
+
     ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
+
+    // Initialize ImGui Win32 and OpenGL3 backends
+    ImGui_ImplWin32_Init(hwnd);
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
@@ -1362,8 +1654,7 @@ void setupImGui(GLFWwindow *window)
  *
  * @param window A pointer to the GLFW window.
  */
-void mainLoop(GLFWwindow *window)
-{
+void mainLoop(HWND hwnd) {
     float inputHeight = Config::INPUT_HEIGHT; // Set your desired input field height here
 
     // Initialize sidebar width with a default value from the configuration
@@ -1374,41 +1665,96 @@ void mainLoop(GLFWwindow *window)
     g_chatManager = std::make_unique<ChatManager>(CHAT_HISTORY_DIRECTORY);
     g_presetManager = std::make_unique<PresetManager>(PRESETS_DIRECTORY);
 
-    // setup NFD
+    // Initialize NFD
     NFD_Init();
 
-    while (glfwWindowShouldClose(window) == GLFW_FALSE)
-    {
-        glfwPollEvents();
+    MSG msg = { 0 };
+    while (msg.message != WM_QUIT) {
+        if (::PeekMessage(&msg, NULL, 0U, 0U, PM_REMOVE)) {
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
+            continue;
+        }
+
+        // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
+        ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
 
-        // Render the sidebar first to capture any width changes
+		// Draw the diagonal gradient background on active windows
+        if (g_borderlessWindow->isActive())
+        {
+            ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+            ImVec2 window_pos = ImGui::GetMainViewport()->Pos;
+            ImVec2 window_size = ImGui::GetMainViewport()->Size;
+
+            // Define the colors at each corner
+            ImVec4 color_top_left     = ImVec4(0.05f, 0.07f, 0.12f, 1.0f); // Dark Blue
+            ImVec4 color_bottom_right = ImVec4(0.16f, 0.14f, 0.08f, 1.0f); // Dark Green
+
+            // Calculate intermediate colors
+            ImVec4 color_top_right = ImLerp(color_top_left, color_bottom_right, 0.5f);
+            ImVec4 color_bottom_left = ImLerp(color_top_left, color_bottom_right, 0.5f);
+
+            // Convert colors to ImU32
+            ImU32 col_top_left = ImGui::ColorConvertFloat4ToU32(color_top_left);
+            ImU32 col_top_right = ImGui::ColorConvertFloat4ToU32(color_top_right);
+            ImU32 col_bottom_right = ImGui::ColorConvertFloat4ToU32(color_bottom_right);
+            ImU32 col_bottom_left = ImGui::ColorConvertFloat4ToU32(color_bottom_left);
+
+            // Draw the rectangle with per-vertex colors
+            draw_list->AddRectFilledMultiColor(
+                window_pos,
+                ImVec2(window_pos.x + window_size.x, window_pos.y + window_size.y),
+                col_top_left, col_top_right, col_bottom_right, col_bottom_left
+            );
+        }
+
+        // Render your UI elements here
         ChatHistorySidebar::render(chatHistorySidebarWidth);
         ModelPresetSidebar::render(modelPresetSidebarWidth);
-
-        // Render the main chat window, passing the current sidebar width
         ChatWindow::render(inputHeight, chatHistorySidebarWidth, modelPresetSidebarWidth);
+
+        // Draw the blue border if the window is active
+        if (g_borderlessWindow->isActive()) {
+            ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+            ImGuiIO& io = ImGui::GetIO();
+            float thickness = 2.0f;
+            ImVec4 color = ImVec4(0.0f, 0.478f, 0.843f, 1.0f); // Blue color
+            ImU32 border_color = ImGui::ColorConvertFloat4ToU32(color);
+
+            ImVec2 min = ImVec2(0.0f, 0.0f);
+            ImVec2 max = io.DisplaySize;
+
+            float corner_radius = 8.0f;
+
+            draw_list->AddRect(min, max, border_color, corner_radius, 0, thickness);
+        }
 
         // Render the ImGui frame
         ImGui::Render();
 
         // Get the framebuffer size
-        int display_w;
-        int display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
+        int display_w, display_h;
+        RECT rect;
+        if (GetClientRect(hwnd, &rect)) {
+            display_w = rect.right - rect.left;
+            display_h = rect.bottom - rect.top;
+        }
+        else {
+            display_w = 800;
+            display_h = 600;
+        }
 
         // Set the viewport and clear the screen
         glViewport(0, 0, display_w, display_h);
-        glClearColor(Config::BackgroundColor::R, Config::BackgroundColor::G, Config::BackgroundColor::B, Config::BackgroundColor::A);
+        glClearColor(0, 0, 0, 0); // Clear with transparent color if blending is enabled
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Render ImGui draw data
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-        // Swap buffers
-        glfwSwapBuffers(window);
+        SwapBuffers(g_deviceContext);
     }
 
     NFD_Quit();
@@ -1419,13 +1765,29 @@ void mainLoop(GLFWwindow *window)
  *
  * @param window A pointer to the GLFW window to be destroyed.
  */
-void cleanup(GLFWwindow *window)
-{
+void cleanup() {
     ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
+    ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
-    glfwDestroyWindow(window);
-    glfwTerminate();
+
+    // Clean up OpenGL context and window
+    if (g_openglContext) {
+        wglMakeCurrent(NULL, NULL);
+        wglDeleteContext(g_openglContext);
+        g_openglContext = nullptr;
+    }
+
+    if (g_deviceContext && g_borderlessWindow && g_borderlessWindow->handle) {
+        ReleaseDC(g_borderlessWindow->handle, g_deviceContext);
+        g_deviceContext = nullptr;
+    }
+
+    if (g_borderlessWindow && g_borderlessWindow->handle) {
+        DestroyWindow(g_borderlessWindow->handle);
+        g_borderlessWindow->handle = nullptr;
+    }
+
+    g_borderlessWindow.reset();
 }
 
 //-----------------------------------------------------------------------------
@@ -2099,13 +2461,19 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
 
     // Apply horizontal padding and render label
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
-    Widgets::Label::render(LabelConfig{.id = label, .label = renderLabel, .size = ImVec2(0, 0), .isBold = false, .iconSolid = false});
+    LabelConfig labelConfig;
+	labelConfig.id = label;
+	labelConfig.label = renderLabel;
+	labelConfig.size = ImVec2(0, 0);
+	labelConfig.isBold = false;
+	labelConfig.iconSolid = false;
+    Widgets::Label::render(labelConfig);
 
     // Move the cursor to the right edge minus the input field width and padding
     ImGui::SameLine();
 
     // Apply custom styling for InputFloat
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, Config::Color::TRANSPARENT);
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, Config::Color::TRANSPARENT_COL);
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Config::Color::SECONDARY);
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Config::Color::PRIMARY);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0F);
@@ -2152,7 +2520,7 @@ void Widgets::Slider::render(const char *label, float &value, float minValue, fl
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Config::Slider::TRACK_COLOR);
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Config::Slider::TRACK_COLOR);
     ImGui::PushStyleColor(ImGuiStyleVar_SliderContrast, 1.0F);
-    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Config::Color::TRANSPARENT);
+    ImGui::PushStyleColor(ImGuiCol_SliderGrab, Config::Color::TRANSPARENT_COL);
     ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Config::Slider::GRAB_COLOR);
     ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, Config::Slider::GRAB_MIN_SIZE);
     ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, Config::Slider::GRAB_RADIUS);
@@ -2188,7 +2556,13 @@ void Widgets::IntInputField::render(const char *label, int &value, const float i
 
     // Apply horizontal padding and render label
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
-    Widgets::Label::render(LabelConfig{.id = label, .label = renderLabel, .size = ImVec2(0, 0), .isBold = false, .iconSolid = false});
+	LabelConfig labelConfig;
+	labelConfig.id = label;
+	labelConfig.label = renderLabel;
+	labelConfig.size = ImVec2(0, 0);
+	labelConfig.isBold = false;
+	labelConfig.iconSolid = false;
+    Widgets::Label::render(labelConfig);
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY());
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
@@ -2362,17 +2736,16 @@ void ChatWindow::MessageBubble::renderButtons(const Message msg, int index, floa
 
     if (msg.role == "user")
     {
-        ButtonConfig copyButtonConfig{
-            .id = "##copy" + std::to_string(index),
-            .label = std::nullopt,
-            .icon = ICON_FA_COPY,
-            .size = ImVec2(Config::Button::WIDTH, 0),
-            .onClick = [&msg]()
-            {
-                ImGui::SetClipboardText(msg.content.c_str());
-                std::cout << "Copied message content to clipboard" << std::endl;
-            }};
-
+        ButtonConfig copyButtonConfig;
+		copyButtonConfig.id = "##copy" + std::to_string(index);
+		copyButtonConfig.label = std::nullopt;
+		copyButtonConfig.icon = ICON_FA_COPY;
+		copyButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
+		copyButtonConfig.onClick = [&msg]()
+			{
+				ImGui::SetClipboardText(msg.content.c_str());
+				std::cout << "Copied message content to clipboard" << std::endl;
+			};
         std::vector<ButtonConfig> userButtons = {copyButtonConfig};
 
         Widgets::Button::renderGroup(
@@ -2382,25 +2755,25 @@ void ChatWindow::MessageBubble::renderButtons(const Message msg, int index, floa
     }
     else
     {
-        ButtonConfig likeButtonConfig{
-            .id = "##like" + std::to_string(index),
-            .label = std::nullopt,
-            .icon = ICON_FA_THUMBS_UP,
-            .size = ImVec2(Config::Button::WIDTH, 0),
-            .onClick = [index]()
-            {
-                std::cout << "Like button clicked for message " << index << std::endl;
-            }};
+		ButtonConfig likeButtonConfig;
+		likeButtonConfig.id = "##like" + std::to_string(index);
+		likeButtonConfig.label = std::nullopt;
+		likeButtonConfig.icon = ICON_FA_THUMBS_UP;
+		likeButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
+		likeButtonConfig.onClick = [index]()
+			{
+				std::cout << "Like button clicked for message " << index << std::endl;
+			};
 
-        ButtonConfig dislikeButtonConfig{
-            .id = "##dislike" + std::to_string(index),
-            .label = std::nullopt,
-            .icon = ICON_FA_THUMBS_DOWN,
-            .size = ImVec2(Config::Button::WIDTH, 0),
-            .onClick = [index]()
-            {
-                std::cout << "Dislike button clicked for message " << index << std::endl;
-            }};
+		ButtonConfig dislikeButtonConfig;
+		dislikeButtonConfig.id = "##dislike" + std::to_string(index);
+		dislikeButtonConfig.label = std::nullopt;
+		dislikeButtonConfig.icon = ICON_FA_THUMBS_DOWN;
+		dislikeButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
+		dislikeButtonConfig.onClick = [index]()
+			{
+				std::cout << "Dislike button clicked for message " << index << std::endl;
+			};
 
         std::vector<ButtonConfig> assistantButtons = {likeButtonConfig, dislikeButtonConfig};
 
@@ -2539,48 +2912,48 @@ void ChatWindow::renderRenameChatDialog(bool &showRenameChatDialog)
             newChatName[sizeof(newChatName) - 1] = '\0'; // Ensure null-terminated
         }
 
-        Widgets::InputField::render(
-            InputFieldConfig{
-                .id = "##newchatname",
-                .size = ImVec2(250, 0),
-                .inputTextBuffer = newChatName,
-                .placeholderText = "Enter new chat name...",
-                .flags = ImGuiInputTextFlags_EnterReturnsTrue,
-                .processInput = processInput,
-                .focusInputField = focusNewChatName,
-                .frameRounding = 5.0F});
+        InputFieldConfig inputConfig(
+			"##newchatname",            // ID
+			ImVec2(250, 0), 		    // Size
+			newChatName,                // Input text buffer
+			focusNewChatName);          // Focus
+		inputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue;
+		inputConfig.processInput = processInput;
+		inputConfig.frameRounding = 5.0F;
+        Widgets::InputField::render(inputConfig);
 
         ImGui::Spacing();
 
-        ButtonConfig confirmRename{
-            .id = "##confirmRename",
-            .label = "Rename",
-            .icon = std::nullopt,
-            .size = ImVec2(122.5F, 0),
-            .onClick = []()
-            {
-                g_chatManager->renameCurrentChat(newChatName);
-                ImGui::CloseCurrentPopup();
-                memset(newChatName.data(), 0, sizeof(newChatName));
-            },
-            .iconSolid = false,
-            .backgroundColor = RGBAToImVec4(26, 95, 180, 255),
-            .hoverColor = RGBAToImVec4(53, 132, 228, 255),
-            .activeColor = RGBAToImVec4(26, 95, 180, 255)};
-        ButtonConfig cancelRename{
-            .id = "##cancelRename",
-            .label = "Cancel",
-            .icon = std::nullopt,
-            .size = ImVec2(122.5F, 0),
-            .onClick = []()
-            {
-                ImGui::CloseCurrentPopup();
-                memset(newChatName.data(), 0, sizeof(newChatName));
-            },
-            .iconSolid = false,
-            .backgroundColor = Config::Color::SECONDARY,
-            .hoverColor = Config::Color::PRIMARY,
-            .activeColor = Config::Color::SECONDARY};
+        ButtonConfig confirmRename;
+		confirmRename.id = "##confirmRename";
+		confirmRename.label = "Rename";
+		confirmRename.icon = std::nullopt;
+		confirmRename.size = ImVec2(122.5F, 0);
+		confirmRename.onClick = []()
+			{
+				g_chatManager->renameCurrentChat(newChatName);
+				ImGui::CloseCurrentPopup();
+				memset(newChatName.data(), 0, sizeof(newChatName));
+			};
+		confirmRename.iconSolid = false;
+		confirmRename.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
+		confirmRename.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+		confirmRename.activeColor = RGBAToImVec4(26, 95, 180, 255);
+
+		ButtonConfig cancelRename;
+		cancelRename.id = "##cancelRename";
+		cancelRename.label = "Cancel";
+		cancelRename.icon = std::nullopt;
+		cancelRename.size = ImVec2(122.5F, 0);
+		cancelRename.onClick = []()
+			{
+				ImGui::CloseCurrentPopup();
+				memset(newChatName.data(), 0, sizeof(newChatName));
+			};
+		cancelRename.iconSolid = false;
+		cancelRename.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
+		cancelRename.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+		cancelRename.activeColor = RGBAToImVec4(26, 95, 180, 255);
 
         std::vector<ButtonConfig> renameChatDialogButtons = {confirmRename, cancelRename};
         Widgets::Button::renderGroup(renameChatDialogButtons, ImGui::GetCursorPosX(), ImGui::GetCursorPosY(), 10);
@@ -2627,27 +3000,20 @@ void ChatWindow::render(float inputHeight, float leftSidebarWidth, float rightSi
     float contentWidth = (availableWidth < Config::CHAT_WINDOW_CONTENT_WIDTH) ? availableWidth : Config::CHAT_WINDOW_CONTENT_WIDTH;
     float paddingX = (availableWidth - contentWidth) / 2.0F;
     float renameButtonWidth = 128.0F;
-
-    // Center the rename button horizontally
-    if (paddingX > 0.0F)
-    {
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX + (contentWidth - renameButtonWidth) / 2.0F);
-    }
-
     static bool showRenameChatDialog = false;
 
     // Render the rename button
-    ButtonConfig renameButtonConfig{
-        .id = "##renameChat",
-        .label = g_chatManager->getCurrentChatHistory().name,
-        .icon = ICON_FA_PEN,
-        .size = ImVec2(renameButtonWidth, 0),
-        .gap = 10.0F,
-        .onClick = []()
-        {
-            showRenameChatDialog = true;
-        }};
-
+	ButtonConfig renameButtonConfig;
+	renameButtonConfig.id = "##renameChat";
+	renameButtonConfig.label = g_chatManager->getCurrentChatHistory().name;
+	renameButtonConfig.icon = ICON_FA_PEN;
+	renameButtonConfig.size = ImVec2(renameButtonWidth, 0);
+	renameButtonConfig.gap = 10.0F;
+	renameButtonConfig.onClick = []()
+		{
+			showRenameChatDialog = true;
+		};
+	renameButtonConfig.alignment = Alignment::LEFT;
     Widgets::Button::render(renameButtonConfig);
 
     // Render the rename chat dialog
@@ -2711,15 +3077,15 @@ void ChatWindow::renderInputField(float inputHeight, float inputWidth)
     };
 
     // Render the input field widget with a placeholder
-    Widgets::InputField::renderMultiline(
-        InputFieldConfig{
-            .id = "##chatinput",
-            .size = inputSize,
-            .inputTextBuffer = inputTextBuffer,
-            .placeholderText = "Type a message and press Enter to send (Ctrl+Enter or Shift+Enter for new line)",
-            .flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine | ImGuiInputTextFlags_ShiftEnterForNewLine,
-            .processInput = processInput,
-            .focusInputField = focusInputField});
+    InputFieldConfig inputConfig(
+		"##chatinput",      // ID
+		inputSize,          // Size
+		inputTextBuffer,    // Input text buffer
+		focusInputField);   // Focus
+	inputConfig.placeholderText = "Type a message and press Enter to send (Ctrl+Enter or Shift+Enter for new line)";
+	inputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine | ImGuiInputTextFlags_ShiftEnterForNewLine;
+	inputConfig.processInput = processInput;
+    Widgets::InputField::renderMultiline(inputConfig);
 }
 
 //-----------------------------------------------------------------------------
@@ -2753,20 +3119,19 @@ void ChatHistorySidebar::render(float &sidebarWidth)
     ImVec2 currentSize = ImGui::GetWindowSize();
     sidebarWidth = currentSize.x;
 
-    ButtonConfig createNewChatButtonConfig{
-        .id = "##createNewChat",
-        .label = "New Chat",
-        .icon = ICON_FA_COMMENT_MEDICAL,
-        .size = ImVec2(sidebarWidth - 20, 0),
-        .gap = 10.0F,
-        .onClick = []()
-        {
-            g_chatManager->createNewChat();
-        },
-        .backgroundColor = RGBAToImVec4(26, 95, 180, 128),
-        .hoverColor = RGBAToImVec4(53, 132, 228, 255),
-        .activeColor = RGBAToImVec4(53, 132, 228, 255)};
-
+	ButtonConfig createNewChatButtonConfig;
+	createNewChatButtonConfig.id = "##createNewChat";
+	createNewChatButtonConfig.label = "New Chat";
+	createNewChatButtonConfig.icon = ICON_FA_COMMENT_MEDICAL;
+	createNewChatButtonConfig.size = ImVec2(sidebarWidth - 20, 0);
+	createNewChatButtonConfig.gap = 10.0F;
+	createNewChatButtonConfig.onClick = []()
+		{
+			g_chatManager->createNewChat();
+		};
+	createNewChatButtonConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 128);
+	createNewChatButtonConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+	createNewChatButtonConfig.activeColor = RGBAToImVec4(53, 132, 228, 255);
     Widgets::Button::render(createNewChatButtonConfig);
 
     ImGui::Spacing();
@@ -2775,12 +3140,13 @@ void ChatHistorySidebar::render(float &sidebarWidth)
     ImGui::Spacing();
     ImGui::Spacing();
 
-    Widgets::Label::render(
-        LabelConfig{.id = "##chathistory",
-                    .label = "Recents",
-                    .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
-                    .iconPaddingX = 10.0F,
-                    .isBold = true});
+	LabelConfig labelConfig;
+	labelConfig.id = "##chathistory";
+	labelConfig.label = "Recents";
+	labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
+	labelConfig.iconPaddingX = 10.0F;
+	labelConfig.isBold = true;
+	Widgets::Label::render(labelConfig);
 
     ImGui::Spacing();
 
@@ -2791,19 +3157,18 @@ void ChatHistorySidebar::render(float &sidebarWidth)
     {
         const ChatHistory chat = g_chatManager->getChatHistory(i);
 
-        ButtonConfig chatButtonConfig{
-            .id = "##chat" + std::to_string(i),
-            .label = chat.name,
-            .icon = ICON_FA_COMMENT,
-            .size = ImVec2(sidebarWidth - 20, 0),
-            .gap = 10.0F,
-            .onClick = [i]()
-            {
-                g_chatManager->switchChat(i);
-            },
-            .state = (i == g_chatManager->getCurrentChatIndex()) ? ButtonState::ACTIVE : ButtonState::NORMAL,
-            .alignment = Alignment::LEFT};
-
+		ButtonConfig chatButtonConfig;
+		chatButtonConfig.id = "##chat" + std::to_string(i);
+		chatButtonConfig.label = chat.name;
+		chatButtonConfig.icon = ICON_FA_COMMENT;
+		chatButtonConfig.size = ImVec2(sidebarWidth - 20, 0);
+		chatButtonConfig.gap = 10.0F;
+		chatButtonConfig.onClick = [i]()
+			{
+				g_chatManager->switchChat(i);
+			};
+		chatButtonConfig.state = (i == g_chatManager->getCurrentChatIndex()) ? ButtonState::ACTIVE : ButtonState::NORMAL;
+		chatButtonConfig.alignment = Alignment::LEFT;
         Widgets::Button::render(chatButtonConfig);
     }
 
@@ -2826,11 +3191,13 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
     ImGui::Spacing();
     ImGui::Spacing();
 
-    Widgets::Label::render({.id = "##systemprompt",
-                            .label = "System Prompt",
-                            .icon = ICON_FA_COG,
-                            .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
-                            .isBold = true});
+	LabelConfig labelConfig;
+	labelConfig.id = "##systempromptlabel";
+	labelConfig.label = "System Prompt";
+	labelConfig.icon = ICON_FA_COG;
+	labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
+	labelConfig.isBold = true;
+	Widgets::Label::render(labelConfig);
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -2846,26 +3213,29 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
     ImVec2 inputSize = ImVec2(sidebarWidth - 20, 100);
 
     // Provide a processInput lambda to update the systemPrompt
-    Widgets::InputField::renderMultiline(
-        InputFieldConfig{
-            .id = "##systemprompt",
-            .size = inputSize,
-            .inputTextBuffer = currentPreset.systemPrompt, // Ensure mutable access
-            .placeholderText = "Enter your system prompt here...",
-            .processInput = [&](const std::string &input)
-            {
-                currentPreset.systemPrompt = input; // Update the string with user input
-            },
-            .focusInputField = focusSystemPrompt});
+    InputFieldConfig inputFieldConfig(
+		"##systemprompt",           // ID
+		inputSize, 				    // Size
+		currentPreset.systemPrompt, // Input text buffer
+		focusSystemPrompt);		    // Focus
+	inputFieldConfig.placeholderText = "Enter your system prompt here...";
+	inputFieldConfig.processInput = [&](const std::string& input)
+		{
+			currentPreset.systemPrompt = input;
+		};
+	Widgets::InputField::renderMultiline(inputFieldConfig);
 
     ImGui::Spacing();
     ImGui::Spacing();
 
-    Widgets::Label::render({.id = "##modelconfig",
-                            .label = "Model Configuration",
-                            .icon = ICON_FA_SLIDERS_H,
-                            .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
-                            .isBold = true});
+	// Model settings label
+	LabelConfig modelSettingsLabelConfig;
+	modelSettingsLabelConfig.id = "##modelsettings";
+	modelSettingsLabelConfig.label = "Model Settings";
+	modelSettingsLabelConfig.icon = ICON_FA_SLIDERS_H;
+	modelSettingsLabelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
+	modelSettingsLabelConfig.isBold = true;
+	Widgets::Label::render(modelSettingsLabelConfig);
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -2941,49 +3311,51 @@ void ModelPresetSidebar::renderSaveAsDialog(bool &showSaveAsDialog)
             newPresetName[sizeof(newPresetName) - 1] = '\0'; // Ensure null-terminated
         }
 
-        Widgets::InputField::render(
-            InputFieldConfig{
-                .id = "##newpresetname",
-                .size = ImVec2(250, 0),
-                .inputTextBuffer = newPresetName,
-                .placeholderText = "Enter new preset name...",
-                .flags = ImGuiInputTextFlags_EnterReturnsTrue,
-                .processInput = processInput,
-                .focusInputField = focusNewPresetName,
-                .frameRounding = 5.0F});
+		// Render the input field for the new preset name
+        InputFieldConfig newPresetNameInputConfig(
+			"##newpresetname",          // ID
+			ImVec2(250, 0), 		    // Size
+			newPresetName,              // Input text buffer
+			focusNewPresetName);        // Focus
+		newPresetNameInputConfig.placeholderText = "Enter new preset name...";
+		newPresetNameInputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue;
+		newPresetNameInputConfig.processInput = processInput;
+		newPresetNameInputConfig.frameRounding = 5.0F;
+		Widgets::InputField::render(newPresetNameInputConfig);
 
         ImGui::Spacing();
 
-        ButtonConfig confirmSave{
-            .id = "##confirmSave",
-            .label = "Save",
-            .icon = std::nullopt,
-            .size = ImVec2(122.5F, 0),
-            .onClick = []()
-            {
-                confirmSaveAsDialog(newPresetName);
-            },
-            .iconSolid = false,
-            .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
-            .hoverColor = RGBAToImVec4(53, 132, 228, 255),
-            .activeColor = RGBAToImVec4(26, 95, 180, 255)};
+		// Save and Cancel buttons
+        ButtonConfig confirmSaveConfig;
+		confirmSaveConfig.id = "##confirmSave";
+		confirmSaveConfig.label = "Save";
+		confirmSaveConfig.icon = std::nullopt;
+		confirmSaveConfig.size = ImVec2(122.5F, 0);
+		confirmSaveConfig.onClick = []()
+			{
+				confirmSaveAsDialog(newPresetName);
+			};
+		confirmSaveConfig.iconSolid = false;
+		confirmSaveConfig.backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128);
+		confirmSaveConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+		confirmSaveConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
 
-        ButtonConfig cancelSave{
-            .id = "##cancelSave",
-            .label = "Cancel",
-            .icon = std::nullopt,
-            .size = ImVec2(122.5F, 0),
-            .onClick = []()
-            {
-                ImGui::CloseCurrentPopup();
-                memset(newPresetName.data(), 0, sizeof(newPresetName));
-            },
-            .iconSolid = false,
-            .backgroundColor = Config::Color::SECONDARY,
-            .hoverColor = Config::Color::PRIMARY,
-            .activeColor = Config::Color::SECONDARY};
+        ButtonConfig cancelSaveConfig;
+		cancelSaveConfig.id = "##cancelSave";
+		cancelSaveConfig.label = "Cancel";
+		cancelSaveConfig.icon = std::nullopt;
+		cancelSaveConfig.size = ImVec2(122.5F, 0);
+		cancelSaveConfig.onClick = []()
+			{
+				ImGui::CloseCurrentPopup();
+				memset(newPresetName.data(), 0, sizeof(newPresetName));
+			};
+		cancelSaveConfig.iconSolid = false;
+		cancelSaveConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
+		cancelSaveConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+		cancelSaveConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
 
-        std::vector<ButtonConfig> saveAsDialogButtons = {confirmSave, cancelSave};
+        std::vector<ButtonConfig> saveAsDialogButtons = {confirmSaveConfig, cancelSaveConfig};
         Widgets::Button::renderGroup(saveAsDialogButtons, ImGui::GetCursorPosX(), ImGui::GetCursorPosY(), 10);
 
         ImGui::EndPopup();
@@ -3004,11 +3376,14 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
     ImGui::Spacing();
     ImGui::Spacing();
 
-    Widgets::Label::render({.id = "##modelpresets",
-                            .label = "Model Presets",
-                            .icon = ICON_FA_BOX_OPEN,
-                            .size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0),
-                            .isBold = true});
+	// Model presets label
+	LabelConfig labelConfig;
+	labelConfig.id = "##modelpresets";
+	labelConfig.label = "Model Presets";
+	labelConfig.icon = ICON_FA_BOX_OPEN;
+	labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
+	labelConfig.isBold = true;
+	Widgets::Label::render(labelConfig);
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -3034,80 +3409,80 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
         g_presetManager->switchPreset(currentIndex);
     }
 
-    // Delete button
     ImGui::SameLine();
-    ButtonConfig deleteButton{
-        .id = "##delete",
-        .label = std::nullopt,
-        .icon = ICON_FA_TRASH,
-        .size = ImVec2(24, 0),
-        .onClick = []()
-        {
-            if (g_presetManager->getPresets().size() > 1)
-            { // Prevent deleting last preset
-                auto &currentPreset = g_presetManager->getCurrentPreset();
-                if (g_presetManager->deletePreset(currentPreset.name))
-                {
-                    // Force reload presets after successful deletion
-                    g_presetManager->loadPresets();
-                }
-            }
-        },
-        .iconSolid = true,
-        .backgroundColor = Config::Color::TRANSPARENT,
-        .hoverColor = RGBAToImVec4(191, 88, 86, 255),
-        .activeColor = RGBAToImVec4(165, 29, 45, 255)};
+
+    // Delete button
+	ButtonConfig deleteButtonConfig;
+	deleteButtonConfig.id = "##delete";
+	deleteButtonConfig.label = std::nullopt;
+	deleteButtonConfig.icon = ICON_FA_TRASH;
+	deleteButtonConfig.size = ImVec2(24, 0);
+	deleteButtonConfig.onClick = []()
+		{
+			if (g_presetManager->getPresets().size() > 1)
+			{ // Prevent deleting last preset
+				auto& currentPreset = g_presetManager->getCurrentPreset();
+				if (g_presetManager->deletePreset(currentPreset.name))
+				{
+					// Force reload presets after successful deletion
+					g_presetManager->loadPresets();
+				}
+			}
+		};
+	deleteButtonConfig.iconSolid = true;
+	deleteButtonConfig.backgroundColor = Config::Color::TRANSPARENT_COL;
+	deleteButtonConfig.hoverColor = RGBAToImVec4(191, 88, 86, 255);
+	deleteButtonConfig.activeColor = RGBAToImVec4(165, 29, 45, 255);
 
     // Only enable delete button if we have more than one preset
     if (presets.size() <= 1)
     {
-        deleteButton.state = ButtonState::DISABLED;
+        deleteButtonConfig.state = ButtonState::DISABLED;
     }
 
-    Widgets::Button::render(deleteButton);
+    Widgets::Button::render(deleteButtonConfig);
 
     ImGui::Spacing();
     ImGui::Spacing();
 
     // Save and Save as New buttons
-    ButtonConfig saveButton{
-        .id = "##save",
-        .label = "Save",
-        .icon = std::nullopt,
-        .size = ImVec2(sidebarWidth / 2 - 15, 0),
-        .onClick = []()
-        {
-            bool hasChanges = g_presetManager->hasUnsavedChanges();
-            if (hasChanges)
-            {
-                auto currentPreset = g_presetManager->getCurrentPreset();
-                bool saved = g_presetManager->savePreset(currentPreset);
-                std::cout << "Save result: " << (saved ? "success" : "failed") << std::endl;
-                if (saved)
-                {
-                    g_presetManager->loadPresets();
-                }
-            }
-        },
-        .iconSolid = false,
-        .backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128),
-        .hoverColor = RGBAToImVec4(53, 132, 228, 255),
-        .activeColor = RGBAToImVec4(26, 95, 180, 255)};
-
+	ButtonConfig saveButtonConfig;
+	saveButtonConfig.id = "##save";
+	saveButtonConfig.label = "Save";
+	saveButtonConfig.icon = std::nullopt;
+	saveButtonConfig.size = ImVec2(sidebarWidth / 2 - 15, 0);
+	saveButtonConfig.onClick = []()
+		{
+			bool hasChanges = g_presetManager->hasUnsavedChanges();
+			if (hasChanges)
+			{
+				auto currentPreset = g_presetManager->getCurrentPreset();
+				bool saved = g_presetManager->savePreset(currentPreset);
+				std::cout << "Save result: " << (saved ? "success" : "failed") << std::endl;
+				if (saved)
+				{
+					g_presetManager->loadPresets();
+				}
+			}
+		};
+	saveButtonConfig.iconSolid = false;
+	saveButtonConfig.backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128);
+	saveButtonConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+	saveButtonConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
     
     static bool showSaveAsDialog = false;
 
-    ButtonConfig saveAsNewButton{
-        .id = "##saveasnew",
-        .label = "Save as New",
-        .icon = std::nullopt,
-        .size = ImVec2(sidebarWidth / 2 - 15, 0),
-        .onClick = []()
-        {
-            showSaveAsDialog = true;
-        }};
+	ButtonConfig saveAsNewButtonConfig;
+	saveAsNewButtonConfig.id = "##saveasnew";
+	saveAsNewButtonConfig.label = "Save as New";
+	saveAsNewButtonConfig.icon = std::nullopt;
+	saveAsNewButtonConfig.size = ImVec2(sidebarWidth / 2 - 15, 0);
+	saveAsNewButtonConfig.onClick = []()
+		{
+			showSaveAsDialog = true;
+		};
 
-    std::vector<ButtonConfig> buttons = {saveButton, saveAsNewButton};
+    std::vector<ButtonConfig> buttons = {saveButtonConfig, saveAsNewButtonConfig};
     Widgets::Button::renderGroup(buttons, 9, ImGui::GetCursorPosY(), 10);
 
     ImGui::Spacing();
@@ -3123,10 +3498,9 @@ void ModelPresetSidebar::exportPresets()
 {
     nfdu8char_t *outPath = nullptr;
     nfdu8filteritem_t filters[2] = {{"JSON Files", "json"}};
-    const nfdsavedialogu8args_t args{
-        .filterList = filters,
-        .filterCount = 1,
-    };
+    nfdsavedialogu8args_t args;
+    args.filterList = filters;
+	args.filterCount = 1;
     nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
 
     if (result == NFD_OKAY)
@@ -3204,17 +3578,17 @@ void ModelPresetSidebar::render(float &sidebarWidth)
     ImGui::Spacing();
 
     // Export button
-    ButtonConfig exportButton{
-        .id = "##export",
-        .label = "Export as JSON",
-        .icon = std::nullopt,
-        .size = ImVec2(sidebarWidth - 20, 0),
-        .onClick = ModelPresetSidebar::exportPresets,
-        .iconSolid = false,
-        .backgroundColor = Config::Color::SECONDARY,
-        .hoverColor = Config::Color::PRIMARY,
-        .activeColor = Config::Color::SECONDARY};
-    Widgets::Button::render(exportButton);
+    ButtonConfig exportButtonConfig;
+	exportButtonConfig.id = "##export";
+	exportButtonConfig.label = "Export as JSON";
+	exportButtonConfig.icon = std::nullopt;
+	exportButtonConfig.size = ImVec2(sidebarWidth - 20, 0);
+	exportButtonConfig.onClick = ModelPresetSidebar::exportPresets;
+	exportButtonConfig.iconSolid = false;
+	exportButtonConfig.backgroundColor = Config::Color::SECONDARY;
+	exportButtonConfig.hoverColor = Config::Color::PRIMARY;
+	exportButtonConfig.activeColor = Config::Color::SECONDARY;
+	Widgets::Button::render(exportButtonConfig);
 
     ImGui::End();
 }
