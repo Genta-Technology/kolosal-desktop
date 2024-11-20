@@ -50,8 +50,8 @@
 #include "imgui_impl_win32.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_internal.h"
-#include "IconsFontAwesome5.h"
-#include "IconsFontAwesome5Brands.h"
+#include "IconFontAwesome6.h"
+#include "IconFontAwesome6Brands.h"
 #include "json.hpp"
 
 #define CHAT_HISTORY_DIRECTORY "chat_history"
@@ -172,6 +172,7 @@ namespace Config
     constexpr float BOTTOM_MARGIN = 10.0F;
     constexpr float INPUT_HEIGHT = 100.0F;
     constexpr float CHAT_WINDOW_CONTENT_WIDTH = 750.0F;
+	constexpr float TITLE_BAR_HEIGHT = 50.0F;
 } // namespace Config
 
 //-----------------------------------------------------------------------------

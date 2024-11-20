@@ -1469,7 +1469,6 @@ LRESULT CALLBACK BorderlessWindow::WndProc(HWND hwnd, UINT msg, WPARAM wparam, L
 
 auto BorderlessWindow::hit_test(POINT cursor) const -> LRESULT {
     // Identify borders and corners to allow resizing the window.
-    int titleBarHeight = 30; // Adjust based on your UI layout
     const POINT border{
         ::GetSystemMetrics(SM_CXFRAME) + ::GetSystemMetrics(SM_CXPADDEDBORDER),
         ::GetSystemMetrics(SM_CYFRAME) + ::GetSystemMetrics(SM_CXPADDEDBORDER)
@@ -1480,7 +1479,7 @@ auto BorderlessWindow::hit_test(POINT cursor) const -> LRESULT {
     }
 
     // Check if the cursor is within the custom title bar
-    if (cursor.y >= window.top && cursor.y < window.top + titleBarHeight) {
+    if (cursor.y >= window.top && cursor.y < window.top + Config::TITLE_BAR_HEIGHT) {
         return HTCAPTION;
     }
 
@@ -1898,7 +1897,7 @@ void mainLoop(HWND hwnd) {
     // Setup full-screen quad
     setupFullScreenQuad();
 
-    // Transition variables
+    // Transition variables on/off focus
     float transitionProgress = 0.0f;
     const float transitionDuration = 0.3f; // Duration in seconds
     bool isTransitioning = false;
@@ -3214,7 +3213,7 @@ void ChatWindow::renderRenameChatDialog(bool &showRenameChatDialog)
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
 
     // Apply rounded corners to the window
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 
     if (ImGui::BeginPopupModal("Rename Chat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -3303,10 +3302,10 @@ void ChatWindow::render(float inputHeight, float leftSidebarWidth, float rightSi
     ImGuiIO &imguiIO = ImGui::GetIO();
 
     // Calculate the size of the chat window based on the sidebar width
-    ImVec2 windowSize = ImVec2(imguiIO.DisplaySize.x - rightSidebarWidth - leftSidebarWidth, imguiIO.DisplaySize.y);
+    ImVec2 windowSize = ImVec2(imguiIO.DisplaySize.x - rightSidebarWidth - leftSidebarWidth, imguiIO.DisplaySize.y - Config::TITLE_BAR_HEIGHT);
 
     // Set window to cover the remaining display area
-    ImGui::SetNextWindowPos(ImVec2(leftSidebarWidth, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(leftSidebarWidth, Config::TITLE_BAR_HEIGHT), ImGuiCond_Always);
     ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
 
     ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
@@ -3424,9 +3423,9 @@ void ChatWindow::renderInputField(float inputHeight, float inputWidth)
 void ChatHistorySidebar::render(float &sidebarWidth)
 {
     ImGuiIO &io = ImGui::GetIO();
-    const float sidebarHeight = io.DisplaySize.y;
+    const float sidebarHeight = io.DisplaySize.y - Config::TITLE_BAR_HEIGHT;
 
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0, Config::TITLE_BAR_HEIGHT), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(sidebarWidth, sidebarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSizeConstraints(
         ImVec2(Config::ChatHistorySidebar::MIN_SIDEBAR_WIDTH, sidebarHeight),
@@ -3443,27 +3442,6 @@ void ChatHistorySidebar::render(float &sidebarWidth)
     ImVec2 currentSize = ImGui::GetWindowSize();
     sidebarWidth = currentSize.x;
 
-	ButtonConfig createNewChatButtonConfig;
-	createNewChatButtonConfig.id = "##createNewChat";
-	createNewChatButtonConfig.label = "New Chat";
-	createNewChatButtonConfig.icon = ICON_FA_COMMENT_MEDICAL;
-	createNewChatButtonConfig.size = ImVec2(sidebarWidth - 20, 0);
-	createNewChatButtonConfig.gap = 10.0F;
-	createNewChatButtonConfig.onClick = []()
-		{
-			g_chatManager->createNewChat();
-		};
-	createNewChatButtonConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 128);
-	createNewChatButtonConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
-	createNewChatButtonConfig.activeColor = RGBAToImVec4(53, 132, 228, 255);
-    Widgets::Button::render(createNewChatButtonConfig);
-
-    ImGui::Spacing();
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
-    ImGui::Spacing();
-
 	LabelConfig labelConfig;
 	labelConfig.id = "##chathistory";
 	labelConfig.label = "Recents";
@@ -3471,6 +3449,28 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 	labelConfig.iconPaddingX = 10.0F;
 	labelConfig.isBold = true;
 	Widgets::Label::render(labelConfig);
+
+    // Calculate label height
+    ImVec2 labelSize  = ImGui::CalcTextSize(labelConfig.label.c_str());
+    float labelHeight = labelSize.y;
+
+    // Button dimensions
+    float buttonHeight = 24.0f;
+
+	ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 28);
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ((labelHeight - buttonHeight) / 2.0f));
+
+    ButtonConfig createNewChatButtonConfig;
+    createNewChatButtonConfig.id = "##createNewChat";
+    createNewChatButtonConfig.icon = ICON_FA_PEN_TO_SQUARE;
+    createNewChatButtonConfig.size = ImVec2(buttonHeight, 24);
+    createNewChatButtonConfig.onClick = []()
+        {
+            g_chatManager->createNewChat();
+        };
+	createNewChatButtonConfig.alignment = Alignment::CENTER;
+    Widgets::Button::render(createNewChatButtonConfig);
 
     ImGui::Spacing();
 
@@ -3494,6 +3494,7 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 		chatButtonConfig.state = (i == g_chatManager->getCurrentChatIndex()) ? ButtonState::ACTIVE : ButtonState::NORMAL;
 		chatButtonConfig.alignment = Alignment::LEFT;
         Widgets::Button::render(chatButtonConfig);
+		ImGui::Spacing();
     }
 
     ImGui::EndChild();
@@ -3518,7 +3519,7 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
 	LabelConfig labelConfig;
 	labelConfig.id = "##systempromptlabel";
 	labelConfig.label = "System Prompt";
-	labelConfig.icon = ICON_FA_COG;
+	labelConfig.icon = ICON_FA_GEAR;
 	labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
 	labelConfig.isBold = true;
 	Widgets::Label::render(labelConfig);
@@ -3556,7 +3557,7 @@ void ModelPresetSidebar::renderSamplingSettings(const float sidebarWidth)
 	LabelConfig modelSettingsLabelConfig;
 	modelSettingsLabelConfig.id = "##modelsettings";
 	modelSettingsLabelConfig.label = "Model Settings";
-	modelSettingsLabelConfig.icon = ICON_FA_SLIDERS_H;
+	modelSettingsLabelConfig.icon = ICON_FA_SLIDERS;
 	modelSettingsLabelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
 	modelSettingsLabelConfig.isBold = true;
 	Widgets::Label::render(modelSettingsLabelConfig);
@@ -3615,7 +3616,7 @@ void ModelPresetSidebar::renderSaveAsDialog(bool &showSaveAsDialog)
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
 
     // Apply rounded corners to the window
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 
     if (ImGui::BeginPopupModal("Save Preset As", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -3757,6 +3758,7 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
 	deleteButtonConfig.backgroundColor = Config::Color::TRANSPARENT_COL;
 	deleteButtonConfig.hoverColor = RGBAToImVec4(191, 88, 86, 255);
 	deleteButtonConfig.activeColor = RGBAToImVec4(165, 29, 45, 255);
+	deleteButtonConfig.alignment = Alignment::CENTER;
 
     // Only enable delete button if we have more than one preset
     if (presets.size() <= 1)
@@ -3874,9 +3876,9 @@ void ModelPresetSidebar::exportPresets()
 void ModelPresetSidebar::render(float &sidebarWidth)
 {
     ImGuiIO &io = ImGui::GetIO();
-    const float sidebarHeight = io.DisplaySize.y;
+    const float sidebarHeight = io.DisplaySize.y - Config::TITLE_BAR_HEIGHT;
 
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - sidebarWidth, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - sidebarWidth, Config::TITLE_BAR_HEIGHT), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(sidebarWidth, sidebarHeight), ImGuiCond_Always);
     ImGui::SetNextWindowSizeConstraints(
         ImVec2(Config::ModelPresetSidebar::MIN_SIDEBAR_WIDTH, sidebarHeight),
