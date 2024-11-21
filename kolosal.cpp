@@ -1479,7 +1479,8 @@ auto BorderlessWindow::hit_test(POINT cursor) const -> LRESULT {
     }
 
     // Check if the cursor is within the custom title bar
-    if (cursor.y >= window.top && cursor.y < window.top + Config::TITLE_BAR_HEIGHT) {
+    if ((cursor.y >= window.top && cursor.y < window.top + Config::TITLE_BAR_HEIGHT) &&
+		(cursor.x <= window.right - 45 * 3)) { // 45px * 3 = 135px (close, minimize, maximize buttons)
         return HTCAPTION;
     }
 
@@ -1850,6 +1851,147 @@ void setupImGui(HWND hwnd) {
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
+void titleBar(HWND hwnd)
+{
+    ImGuiIO& io = ImGui::GetIO();
+    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+
+    // Create an invisible window to capture clicks in the title bar area
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 50.0f)); // Adjust height as needed
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // No padding
+    ImGui::Begin("TitleBar", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+                                   ImGuiWindowFlags_NoBackground);
+
+    // Calculate the positions for the buttons
+    float buttonWidth = 45.0f; // Adjust as needed
+    float buttonHeight = 50.0f; // Same as the title bar height
+    float buttonSpacing = 0.0f; // No spacing
+
+    float x = io.DisplaySize.x - buttonWidth * 3; // Start position for the first button (minimize)
+    float y = 0.0f;
+
+    // Style variables for hover effects
+    ImU32 hoverColor = IM_COL32(255, 255, 255, (int)(255 * 0.3f)); // Adjust alpha as needed
+    ImU32 closeHoverColor = IM_COL32(232, 17, 35, (int)(255 * 0.5f)); // Red color for close button
+
+    // Minimize button
+    ImGui::SetCursorPos(ImVec2(x, y));
+    ImGui::PushID("MinimizeButton");
+    if (ImGui::InvisibleButton("##MinimizeButton", ImVec2(buttonWidth, buttonHeight)))
+    {
+        // Handle minimize
+        ShowWindow(hwnd, SW_MINIMIZE);
+    }
+
+    // Hover effect
+    if (ImGui::IsItemHovered())
+    {
+        ImVec2 p_min = ImGui::GetItemRectMin();
+        ImVec2 p_max = ImGui::GetItemRectMax();
+        draw_list->AddRectFilled(p_min, p_max, hoverColor);
+    }
+
+    // Render minimize icon
+    {
+        ImVec2 iconPos = ImGui::GetItemRectMin();
+        iconPos.x += ((buttonWidth - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).x) / 2.0f) - 2.5;
+        iconPos.y += ((buttonHeight - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).y) / 2.0f) - 5;
+
+        // Select icon font
+        ImGui::PushFont(g_iconFonts.regular);
+        draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), ICON_FA_WINDOW_MINIMIZE);
+        ImGui::PopFont();
+    }
+    ImGui::PopID();
+
+    x += buttonWidth + buttonSpacing;
+
+    // Maximize/Restore button
+    ImGui::SetCursorPos(ImVec2(x, y));
+    ImGui::PushID("MaximizeButton");
+    if (ImGui::InvisibleButton("##MaximizeButton", ImVec2(buttonWidth, buttonHeight)))
+    {
+        // Handle maximize/restore
+        if (IsZoomed(hwnd))
+            ShowWindow(hwnd, SW_RESTORE);
+        else
+            ShowWindow(hwnd, SW_MAXIMIZE);
+    }
+
+    // Hover effect
+    if (ImGui::IsItemHovered())
+    {
+        ImVec2 p_min = ImGui::GetItemRectMin();
+        ImVec2 p_max = ImGui::GetItemRectMax();
+        draw_list->AddRectFilled(p_min, p_max, hoverColor);
+    }
+
+    // Render maximize or restore icon
+    {
+        const char* icon = IsZoomed(hwnd) ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE;
+        ImVec2 iconPos = ImGui::GetItemRectMin();
+        iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 2.5;
+        iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
+
+        // Select icon font
+        ImGui::PushFont(g_iconFonts.regular);
+        draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), icon);
+        ImGui::PopFont();
+    }
+    ImGui::PopID();
+
+    x += buttonWidth + buttonSpacing;
+
+    // Close button
+    ImGui::SetCursorPos(ImVec2(x, y));
+    ImGui::PushID("CloseButton");
+    if (ImGui::InvisibleButton("##CloseButton", ImVec2(buttonWidth, buttonHeight)))
+    {
+        // Handle close
+        PostMessage(hwnd, WM_CLOSE, 0, 0);
+    }
+
+    // Hover effect
+    if (ImGui::IsItemHovered())
+    {
+        ImVec2 p_min = ImGui::GetItemRectMin();
+        ImVec2 p_max = ImGui::GetItemRectMax();
+        draw_list->AddRectFilled(p_min, p_max, closeHoverColor);
+    }
+
+    // Render close icon
+    {
+        ImVec2 p_min = ImGui::GetItemRectMin();
+        ImVec2 p_max = ImGui::GetItemRectMax();
+        float padding = 18.0F;
+        ImU32 symbol_color = IM_COL32(255, 255, 255, 255);
+        float thickness = 1.0f;
+
+        draw_list->AddLine(
+            ImVec2(p_min.x + padding - 2, p_min.y + padding + 1),
+            ImVec2(p_max.x - padding + 2, p_max.y - padding),
+            symbol_color,
+            thickness
+        );
+
+        draw_list->AddLine(
+            ImVec2(p_max.x - padding + 2, p_min.y + padding),
+            ImVec2(p_min.x + padding - 2, p_max.y - padding - 1),
+            symbol_color,
+            thickness
+        );
+    }
+
+    ImGui::PopID();
+
+    ImGui::End();
+    ImGui::PopStyleVar(3);
+}
+
 /**
  * @brief The main loop of the application, which handles rendering and event polling.
  *
@@ -1952,6 +2094,9 @@ void mainLoop(HWND hwnd) {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
+
+		// Render the title bar
+		titleBar(hwnd);
 
         // Render your UI elements here
         ChatHistorySidebar::render(chatHistorySidebarWidth);
