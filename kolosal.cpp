@@ -36,6 +36,9 @@
 #include <fstream>
 #include <ctime>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 //-----------------------------------------------------------------------------
 // [SECTION] Global Variables
 //-----------------------------------------------------------------------------
@@ -1741,7 +1744,7 @@ void setupFullScreenQuad()
 }
 
 //-----------------------------------------------------------------------------
-// [SECTION] GLFW and OpenGL Initialization Functions
+// [SECTION] Win32 and OpenGL Initialization Functions
 //-----------------------------------------------------------------------------
 
 bool initializeOpenGL(HWND hwnd) 
@@ -1818,7 +1821,7 @@ bool initializeOpenGL(HWND hwnd)
 /**
  * @brief Sets up the ImGui context and initializes the platform/renderer backends.
  *
- * @param window A pointer to the GLFW window.
+ * @param window A pointer to the Win32 window.
  */
 void setupImGui(HWND hwnd) {
     IMGUI_CHECKVERSION();
@@ -1851,27 +1854,75 @@ void setupImGui(HWND hwnd) {
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
+GLuint LoadTextureFromFile(const char* filename)
+{
+    int width, height, channels;
+    unsigned char* data = stbi_load(filename, &width, &height, &channels, 4); // Force RGBA
+    if (!data)
+    {
+        fprintf(stderr, "Failed to load texture: %s\n", filename);
+        return 0;
+    }
+
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    // Load texture data into OpenGL
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+
+    // Set texture parameters for scaling
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Optional: Prevent texture wrapping (clamp to edges)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(data);
+
+    return texture;
+}
+
 void titleBar(HWND hwnd)
 {
+    static GLuint logoTexture = 0;
+    static bool textureLoaded = false;
+
+    if (!textureLoaded)
+    {
+        logoTexture = LoadTextureFromFile(KOLOSAL_LOGO_PATH);
+        textureLoaded = true;
+    }
+
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
-    // Create an invisible window to capture clicks in the title bar area
+    // Title bar setup
     ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, 50.0f)); // Adjust height as needed
+    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, Config::TITLE_BAR_HEIGHT)); // Adjust height as needed
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // No padding
     ImGui::Begin("TitleBar", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                   ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
-                                   ImGuiWindowFlags_NoBackground);
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBackground);
 
-    // Calculate the positions for the buttons
+    // Render the logo
+    if (logoTexture)
+    {
+		const float logoWidth = 20.0F;
+        ImGui::SetCursorPos(ImVec2(18, (Config::TITLE_BAR_HEIGHT - logoWidth) / 2)); // Position the logo (adjust as needed)
+        ImGui::Image((ImTextureID)(uintptr_t)logoTexture, ImVec2(logoWidth, logoWidth)); // Adjust size as needed
+		ImGui::SameLine();
+    }
+
+    // Adjust buttons' positions to account for the logo
     float buttonWidth = 45.0f; // Adjust as needed
-    float buttonHeight = 50.0f; // Same as the title bar height
+    float buttonHeight = Config::TITLE_BAR_HEIGHT; // Same as the title bar height
     float buttonSpacing = 0.0f; // No spacing
-
-    float x = io.DisplaySize.x - buttonWidth * 3; // Start position for the first button (minimize)
+    float x = io.DisplaySize.x - buttonWidth * 3;
     float y = 0.0f;
 
     // Style variables for hover effects
@@ -1995,7 +2046,7 @@ void titleBar(HWND hwnd)
 /**
  * @brief The main loop of the application, which handles rendering and event polling.
  *
- * @param window A pointer to the GLFW window.
+ * @param window A pointer to the Win32 window.
  */
 void mainLoop(HWND hwnd) {
     float inputHeight = Config::INPUT_HEIGHT; // Set your desired input field height here
@@ -2229,9 +2280,9 @@ void mainLoop(HWND hwnd) {
 }
 
 /**
- * @brief Cleans up ImGui and GLFW resources before exiting the application.
+ * @brief Cleans up ImGui and Win32 resources before exiting the application.
  *
- * @param window A pointer to the GLFW window to be destroyed.
+ * @param window A pointer to the Win32 window to be destroyed.
  */
 void cleanup() {
     ImGui_ImplOpenGL3_Shutdown();

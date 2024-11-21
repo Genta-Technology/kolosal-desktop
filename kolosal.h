@@ -393,8 +393,6 @@ struct ChatHistory
 // [SECTION] Forward Declarations and Global Variables
 //-----------------------------------------------------------------------------
 
-// Forward declaration of GLFWwindow to avoid including GLFW/glfw3.h
-struct GLFWwindow;
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // Forward declaration of global variables
@@ -604,6 +602,7 @@ void setupFullScreenQuad();
 
 bool initializeOpenGL(HWND hwnd);
 void setupImGui(HWND hwnd);
+void titleBar(HWND hwnd);
 void mainLoop(HWND hwnd);
 void cleanup();
 

@@ -45,7 +45,7 @@ target_include_directories(kolosal_lib PUBLIC
     external/icons
     external/nlohmann
     external/nativefiledialog-extended/src/include
-    # Removed external/glfw/include since GLFW is no longer used
+    external/stb
 )
 
 # Link libraries to Kolosal library
@@ -143,6 +143,17 @@ add_custom_command(
     "${FONT_FILE_FA_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-regular-400.otf"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${FONT_FILE_FA_SOLID}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-solid-900.otf"
+)
+
+# Add custom command to copy the icons to the build directory
+add_custom_command(
+    TARGET KolosalDesktop POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:KolosalDesktop>/assets"
+)
+
+target_compile_definitions(kolosal_lib PUBLIC
+    KOLOSAL_LOGO_PATH="assets/logo.png"
 )
 
 # Add GoogleTest
