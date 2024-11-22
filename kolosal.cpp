@@ -1303,17 +1303,19 @@ namespace
         );
     }
 
-    auto window_class(WNDPROC wndproc) -> const wchar_t* 
+    auto window_class(WNDPROC wndproc, HINSTANCE hInstance) -> const wchar_t* 
     {
         static const wchar_t* window_class_name = [&] {
             WNDCLASSEXW wcx{};
             wcx.cbSize = sizeof(wcx);
             wcx.style = CS_HREDRAW | CS_VREDRAW;
-            wcx.hInstance = nullptr;
+            wcx.hInstance = hInstance;
             wcx.lpfnWndProc = wndproc;
             wcx.lpszClassName = L"BorderlessWindowClass";
             wcx.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-            wcx.hCursor = ::LoadCursorW(nullptr, IDC_ARROW);
+            wcx.hCursor = ::LoadCursorW(hInstance, IDC_ARROW);
+			wcx.hIcon = ::LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+            wcx.hIconSm = ::LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
             const ATOM result = ::RegisterClassExW(&wcx);
             if (!result) {
                 throw last_error("failed to register window class");
@@ -1344,12 +1346,12 @@ namespace
         }
     }
 
-    auto create_window(WNDPROC wndproc, void* userdata) -> HWND 
+    auto create_window(WNDPROC wndproc, HINSTANCE hInstance, void* userdata) -> HWND
     {
         auto handle = CreateWindowExW(
-            0, window_class(wndproc), L"Borderless Window",
+            0, window_class(wndproc, hInstance), L"Kolosal AI",
             static_cast<DWORD>(Style::aero_borderless), CW_USEDEFAULT, CW_USEDEFAULT,
-            1280, 720, nullptr, nullptr, nullptr, userdata
+            1280, 720, nullptr, nullptr, hInstance, userdata
         );
         if (!handle) 
         {
@@ -1359,11 +1361,19 @@ namespace
     }
 }
 
-BorderlessWindow::BorderlessWindow()
-    : handle{ create_window(&BorderlessWindow::WndProc, this) },
-    borderless_drag{ false },
-    borderless_resize{ true }
+BorderlessWindow::BorderlessWindow(HINSTANCE hInstance)
+    : hInstance(hInstance), 
+      handle{ create_window(&BorderlessWindow::WndProc, hInstance, this) },
+      borderless_drag{ false },
+      borderless_resize{ true }
 {
+    HICON hIcon = LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    if (hIcon)
+    {
+        SendMessage(handle, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessage(handle, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+    }
+
     set_borderless(borderless);
     set_borderless_shadow(borderless_shadow);
     ::ShowWindow(handle, SW_SHOW);
@@ -3525,7 +3535,6 @@ void ChatWindow::render(float inputHeight, float leftSidebarWidth, float rightSi
 	ButtonConfig renameButtonConfig;
 	renameButtonConfig.id = "##renameChat";
 	renameButtonConfig.label = g_chatManager->getCurrentChatHistory().name;
-	renameButtonConfig.icon = ICON_FA_PEN;
 	renameButtonConfig.size = ImVec2(renameButtonWidth, 0);
 	renameButtonConfig.gap = 10.0F;
 	renameButtonConfig.onClick = []()

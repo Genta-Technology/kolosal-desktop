@@ -1,9 +1,11 @@
 #include "kolosal.h"
 
-int main() {
-    try {
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) 
+{
+    try 
+    {
         // Create the borderless window
-        g_borderlessWindow = std::make_unique<BorderlessWindow>();
+        g_borderlessWindow = std::make_unique<BorderlessWindow>(hInstance);
 
         // Initialize OpenGL
         if (!initializeOpenGL(g_borderlessWindow->handle))
@@ -20,7 +22,8 @@ int main() {
 
         return 0;
     }
-    catch (const std::exception& e) {
+    catch (const std::exception& e) 
+    {
         ::MessageBoxA(nullptr, e.what(), "Unhandled Exception", MB_OK | MB_ICONERROR);
         return 1;
     }

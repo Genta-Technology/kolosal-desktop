@@ -105,7 +105,7 @@ target_compile_definitions(kolosal_lib PUBLIC
 )
 
 # Create the main executable
-add_executable(KolosalDesktop main.cpp)
+add_executable(KolosalDesktop WIN32 main.cpp resource.rc)
 
 # Include directories for the main executable
 target_include_directories(KolosalDesktop PRIVATE
@@ -150,6 +150,9 @@ add_custom_command(
     TARGET KolosalDesktop POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:KolosalDesktop>/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_SOURCE_DIR}/icon.ico" "$<TARGET_FILE_DIR:KolosalDesktop>/icon.ico"
+
 )
 
 target_compile_definitions(kolosal_lib PUBLIC

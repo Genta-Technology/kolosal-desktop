@@ -53,6 +53,7 @@
 #include "IconFontAwesome6.h"
 #include "IconFontAwesome6Brands.h"
 #include "json.hpp"
+#include "resource.h"
 
 #define CHAT_HISTORY_DIRECTORY "chat_history"
 #define PRESETS_DIRECTORY "presets"
@@ -432,7 +433,7 @@ public:
     /**
      * @brief Constructs a new BorderlessWindow object.
      */
-    BorderlessWindow();
+    BorderlessWindow(HINSTANCE hinstance);
 
     /**
      * @brief Sets the borderless mode of the window.
@@ -480,6 +481,8 @@ private:
     bool borderless_shadow = true;  ///< Indicates if the window displays a native aero shadow while borderless.
 
 	bool is_active = true;		    ///< Indicates if the window is currently active.
+
+	HINSTANCE hInstance;		    ///< Handle to the instance.
 };
 
 
