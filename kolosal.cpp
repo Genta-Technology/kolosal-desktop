@@ -56,6 +56,7 @@ std::unique_ptr<PresetManager>    g_presetManager;
 // [SECTION] Shaders
 //-----------------------------------------------------------------------------
 
+GLuint g_shaderProgram   = 0;
 GLuint g_gradientTexture = 0;
 
 const char* g_quadVertexShaderSource = R"(
@@ -1307,15 +1308,15 @@ namespace
     {
         static const wchar_t* window_class_name = [&] {
             WNDCLASSEXW wcx{};
-            wcx.cbSize = sizeof(wcx);
-            wcx.style = CS_HREDRAW | CS_VREDRAW;
-            wcx.hInstance = hInstance;
-            wcx.lpfnWndProc = wndproc;
+            wcx.cbSize        = sizeof(wcx);
+            wcx.style         = CS_HREDRAW | CS_VREDRAW;
+            wcx.hInstance     = hInstance;
+            wcx.lpfnWndProc   = wndproc;
             wcx.lpszClassName = L"BorderlessWindowClass";
             wcx.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
-            wcx.hCursor = ::LoadCursorW(hInstance, IDC_ARROW);
-			wcx.hIcon = ::LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
-            wcx.hIconSm = ::LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+            wcx.hCursor       = ::LoadCursorW(hInstance, IDC_ARROW);
+			wcx.hIcon         = ::LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+            wcx.hIconSm       = ::LoadIconW(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
             const ATOM result = ::RegisterClassExW(&wcx);
             if (!result) {
                 throw last_error("failed to register window class");
@@ -1753,6 +1754,70 @@ void setupFullScreenQuad()
     glBindVertexArray(0);
 }
 
+void renderGradientBackcground(HWND hwnd, int display_w, int display_h, float transitionProgress, float easedProgress)
+{
+    // Get the framebuffer size
+    RECT newRect;
+    if (GetClientRect(hwnd, &newRect)) {
+        int new_display_w = newRect.right - newRect.left;
+        int new_display_h = newRect.bottom - newRect.top;
+
+        if (new_display_w != display_w || new_display_h != display_h) {
+            display_w = new_display_w;
+            display_h = new_display_h;
+            // Update gradient texture when window size changes
+            generateGradientTexture(display_w, display_h);
+            glViewport(0, 0, display_w, display_h);
+        }
+    }
+    else {
+        display_w = 800;
+        display_h = 600;
+    }
+
+    // Set the viewport and clear the screen
+    glViewport(0, 0, display_w, display_h);
+    glClearColor(0, 0, 0, 0); // Clear with transparent color if blending is enabled
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Disable depth test and face culling
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
+    // Render the gradient texture as background
+    if (transitionProgress > 0.0f)
+    {
+        // Enable blending
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        // Use the shader program
+        glUseProgram(g_shaderProgram);
+
+        // Bind the gradient texture
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, g_gradientTexture);
+
+        // Set the sampler uniform
+        glUniform1i(glGetUniformLocation(g_shaderProgram, "gradientTexture"), 0);
+
+        // Set the transition progress uniform
+        GLint locTransitionProgress = glGetUniformLocation(g_shaderProgram, "uTransitionProgress");
+        glUniform1f(locTransitionProgress, easedProgress); // Use easedProgress
+
+        // Render the full-screen quad
+        glBindVertexArray(g_quadVAO);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+
+        // Unbind the shader program
+        glUseProgram(0);
+
+        // Disable blending if necessary
+        // glDisable(GL_BLEND);
+    }
+}
+
 //-----------------------------------------------------------------------------
 // [SECTION] Win32 and OpenGL Initialization Functions
 //-----------------------------------------------------------------------------
@@ -1852,6 +1917,9 @@ void setupImGui(HWND hwnd) {
 
     imguiIO.FontDefault = g_mdFonts.regular;
 
+    // Enable power save mode
+    imguiIO.ConfigFlags |= ImGuiConfigFlags_EnablePowerSavingMode;
+
     // Adjust ImGui style to match the window's rounded corners
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowRounding = 8.0f; // Match the corner radius
@@ -1897,38 +1965,41 @@ GLuint LoadTextureFromFile(const char* filename)
 
 void titleBar(HWND hwnd)
 {
-    static GLuint logoTexture = 0;
-    static bool textureLoaded = false;
-
-    if (!textureLoaded)
-    {
-        logoTexture = LoadTextureFromFile(KOLOSAL_LOGO_PATH);
-        textureLoaded = true;
-    }
-
     ImGuiIO& io = ImGui::GetIO();
     ImDrawList* draw_list = ImGui::GetForegroundDrawList();
 
     // Title bar setup
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, Config::TITLE_BAR_HEIGHT)); // Adjust height as needed
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // No padding
-    ImGui::Begin("TitleBar", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBackground);
-
-    // Render the logo
-    if (logoTexture)
     {
-		const float logoWidth = 20.0F;
-        ImGui::SetCursorPos(ImVec2(18, (Config::TITLE_BAR_HEIGHT - logoWidth) / 2)); // Position the logo (adjust as needed)
-        ImGui::Image((ImTextureID)(uintptr_t)logoTexture, ImVec2(logoWidth, logoWidth)); // Adjust size as needed
-		ImGui::SameLine();
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, Config::TITLE_BAR_HEIGHT)); // Adjust height as needed
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0)); // No padding
+        ImGui::Begin("TitleBar", NULL, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoBackground);
     }
 
-    // Adjust buttons' positions to account for the logo
+    // Render the logo
+    {
+        static GLuint logoTexture = 0;
+        static bool textureLoaded = false;
+
+        if (!textureLoaded)
+        {
+            logoTexture = LoadTextureFromFile(KOLOSAL_LOGO_PATH);
+            textureLoaded = true;
+        }
+
+        if (logoTexture)
+        {
+            const float logoWidth = 20.0F;
+            ImGui::SetCursorPos(ImVec2(18, (Config::TITLE_BAR_HEIGHT - logoWidth) / 2)); // Position the logo (adjust as needed)
+            ImGui::Image((ImTextureID)(uintptr_t)logoTexture, ImVec2(logoWidth, logoWidth)); // Adjust size as needed
+            ImGui::SameLine();
+        }
+    }
+
     float buttonWidth = 45.0f; // Adjust as needed
     float buttonHeight = Config::TITLE_BAR_HEIGHT; // Same as the title bar height
     float buttonSpacing = 0.0f; // No spacing
@@ -2058,7 +2129,8 @@ void titleBar(HWND hwnd)
  *
  * @param window A pointer to the Win32 window.
  */
-void mainLoop(HWND hwnd) {
+void mainLoop(HWND hwnd) 
+{
     float inputHeight = Config::INPUT_HEIGHT; // Set your desired input field height here
 
     // Initialize sidebar width with a default value from the configuration
@@ -2071,13 +2143,6 @@ void mainLoop(HWND hwnd) {
 
     // Initialize NFD
     NFD_Init();
-
-    // Enable power save mode
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_EnablePowerSavingMode;
-
-    // Shader program
-    GLuint shaderProgram = 0;
 
     // Get initial window size
     int display_w, display_h;
@@ -2095,7 +2160,7 @@ void mainLoop(HWND hwnd) {
     generateGradientTexture(display_w, display_h);
 
     // Create shader program
-    shaderProgram = createShaderProgram(g_quadVertexShaderSource, g_quadFragmentShaderSource);
+    g_shaderProgram = createShaderProgram(g_quadVertexShaderSource, g_quadFragmentShaderSource);
 
     // Setup full-screen quad
     setupFullScreenQuad();
@@ -2160,9 +2225,11 @@ void mainLoop(HWND hwnd) {
 		titleBar(hwnd);
 
         // Render your UI elements here
-        ChatHistorySidebar::render(chatHistorySidebarWidth);
-        ModelPresetSidebar::render(modelPresetSidebarWidth);
-        ChatWindow::render(inputHeight, chatHistorySidebarWidth, modelPresetSidebarWidth);
+        {
+            ChatHistorySidebar::render(chatHistorySidebarWidth);
+            ModelPresetSidebar::render(modelPresetSidebarWidth);
+            ChatWindow::render(inputHeight, chatHistorySidebarWidth, modelPresetSidebarWidth);
+        }
 
         // Draw the blue border if the window is active
         if (g_borderlessWindow->isActive()) 
@@ -2184,66 +2251,7 @@ void mainLoop(HWND hwnd) {
         // Render the ImGui frame
         ImGui::Render();
 
-        // Get the framebuffer size
-        RECT newRect;
-        if (GetClientRect(hwnd, &newRect)) {
-            int new_display_w = newRect.right - newRect.left;
-            int new_display_h = newRect.bottom - newRect.top;
-
-            if (new_display_w != display_w || new_display_h != display_h) {
-                display_w = new_display_w;
-                display_h = new_display_h;
-                // Update gradient texture when window size changes
-                generateGradientTexture(display_w, display_h);
-                glViewport(0, 0, display_w, display_h);
-            }
-        }
-        else {
-            display_w = 800;
-            display_h = 600;
-        }
-
-        // Set the viewport and clear the screen
-        glViewport(0, 0, display_w, display_h);
-        glClearColor(0, 0, 0, 0); // Clear with transparent color if blending is enabled
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        // Disable depth test and face culling
-        glDisable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);
-
-        // Render the gradient texture as background
-        if (transitionProgress > 0.0f)
-        {
-            // Enable blending
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-            // Use the shader program
-            glUseProgram(shaderProgram);
-
-            // Bind the gradient texture
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, g_gradientTexture);
-
-            // Set the sampler uniform
-            glUniform1i(glGetUniformLocation(shaderProgram, "gradientTexture"), 0);
-
-            // Set the transition progress uniform
-            GLint locTransitionProgress = glGetUniformLocation(shaderProgram, "uTransitionProgress");
-            glUniform1f(locTransitionProgress, easedProgress); // Use easedProgress
-
-            // Render the full-screen quad
-            glBindVertexArray(g_quadVAO);
-            glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
-
-            // Unbind the shader program
-            glUseProgram(0);
-
-            // Disable blending if necessary
-            // glDisable(GL_BLEND);
-        }
+        renderGradientBackcground(hwnd, display_w, display_h, transitionProgress, easedProgress);
 
         // Render ImGui draw data
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -2260,32 +2268,6 @@ void mainLoop(HWND hwnd) {
         }
     }
 
-    // Clean up resources
-    if (g_gradientTexture != 0) {
-        glDeleteTextures(1, &g_gradientTexture);
-        g_gradientTexture = 0;
-    }
-
-    if (g_quadVAO != 0) {
-        glDeleteVertexArrays(1, &g_quadVAO);
-        g_quadVAO = 0;
-    }
-
-    if (g_quadVBO != 0) {
-        glDeleteBuffers(1, &g_quadVBO);
-        g_quadVBO = 0;
-    }
-
-    if (g_quadEBO != 0) {
-        glDeleteBuffers(1, &g_quadEBO);
-        g_quadEBO = 0;
-    }
-
-    if (shaderProgram != 0) {
-        glDeleteProgram(shaderProgram);
-        shaderProgram = 0;
-    }
-
     NFD_Quit();
 }
 
@@ -2295,28 +2277,58 @@ void mainLoop(HWND hwnd) {
  * @param window A pointer to the Win32 window to be destroyed.
  */
 void cleanup() {
+    // Clean up shaders resources
+    {
+        if (g_gradientTexture != 0) {
+            glDeleteTextures(1, &g_gradientTexture);
+            g_gradientTexture = 0;
+        }
+
+        if (g_quadVAO != 0) {
+            glDeleteVertexArrays(1, &g_quadVAO);
+            g_quadVAO = 0;
+        }
+
+        if (g_quadVBO != 0) {
+            glDeleteBuffers(1, &g_quadVBO);
+            g_quadVBO = 0;
+        }
+
+        if (g_quadEBO != 0) {
+            glDeleteBuffers(1, &g_quadEBO);
+            g_quadEBO = 0;
+        }
+
+        if (g_shaderProgram != 0) {
+            glDeleteProgram(g_shaderProgram);
+            g_shaderProgram = 0;
+        }
+    }
+    
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
 
     // Clean up OpenGL context and window
-    if (g_openglContext) {
-        wglMakeCurrent(NULL, NULL);
-        wglDeleteContext(g_openglContext);
-        g_openglContext = nullptr;
-    }
+    {
+        if (g_openglContext) {
+            wglMakeCurrent(NULL, NULL);
+            wglDeleteContext(g_openglContext);
+            g_openglContext = nullptr;
+        }
 
-    if (g_deviceContext && g_borderlessWindow && g_borderlessWindow->handle) {
-        ReleaseDC(g_borderlessWindow->handle, g_deviceContext);
-        g_deviceContext = nullptr;
-    }
+        if (g_deviceContext && g_borderlessWindow && g_borderlessWindow->handle) {
+            ReleaseDC(g_borderlessWindow->handle, g_deviceContext);
+            g_deviceContext = nullptr;
+        }
 
-    if (g_borderlessWindow && g_borderlessWindow->handle) {
-        DestroyWindow(g_borderlessWindow->handle);
-        g_borderlessWindow->handle = nullptr;
-    }
+        if (g_borderlessWindow && g_borderlessWindow->handle) {
+            DestroyWindow(g_borderlessWindow->handle);
+            g_borderlessWindow->handle = nullptr;
+        }
 
-    g_borderlessWindow.reset();
+        g_borderlessWindow.reset();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -3679,18 +3691,23 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 
     ImGui::Spacing();
 
-    // Render chat history buttons scroll region
-    ImGui::BeginChild("ChatHistoryButtons", ImVec2(sidebarWidth, ImGui::GetContentRegionAvail().y - 10), false, ImGuiWindowFlags_NoScrollbar);
+	renderChatHistoryList(ImVec2(sidebarWidth, sidebarHeight - labelHeight));
 
-    for (size_t i = 0; i < g_chatManager->getChatHistoryCount(); ++i)
-    {
-        const ChatHistory chat = g_chatManager->getChatHistory(i);
+    ImGui::End();
+}
 
+void ChatHistorySidebar::renderChatHistoryList(ImVec2 contentArea)
+{
+	// Render chat history buttons scroll region
+	ImGui::BeginChild("ChatHistoryButtons", contentArea, false, ImGuiWindowFlags_NoScrollbar);
+	for (size_t i = 0; i < g_chatManager->getChatHistoryCount(); ++i)
+	{
+		const ChatHistory chat = g_chatManager->getChatHistory(i);
 		ButtonConfig chatButtonConfig;
 		chatButtonConfig.id = "##chat" + std::to_string(i);
 		chatButtonConfig.label = chat.name;
 		chatButtonConfig.icon = ICON_FA_COMMENT;
-		chatButtonConfig.size = ImVec2(sidebarWidth - 20, 0);
+		chatButtonConfig.size = ImVec2(contentArea.x - 20, 0);
 		chatButtonConfig.gap = 10.0F;
 		chatButtonConfig.onClick = [i]()
 			{
@@ -3698,13 +3715,10 @@ void ChatHistorySidebar::render(float &sidebarWidth)
 			};
 		chatButtonConfig.state = (i == g_chatManager->getCurrentChatIndex()) ? ButtonState::ACTIVE : ButtonState::NORMAL;
 		chatButtonConfig.alignment = Alignment::LEFT;
-        Widgets::Button::render(chatButtonConfig);
+		Widgets::Button::render(chatButtonConfig);
 		ImGui::Spacing();
-    }
-
-    ImGui::EndChild();
-
-    ImGui::End();
+	}
+	ImGui::EndChild();
 }
 
 //-----------------------------------------------------------------------------
@@ -3903,17 +3917,21 @@ void ModelPresetSidebar::renderSaveAsDialog(bool &showSaveAsDialog)
  */
 void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
 {
+    static bool showSaveAsDialog = false;
+
     ImGui::Spacing();
     ImGui::Spacing();
 
 	// Model presets label
-	LabelConfig labelConfig;
-	labelConfig.id = "##modelpresets";
-	labelConfig.label = "Model Presets";
-	labelConfig.icon = ICON_FA_BOX_OPEN;
-	labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
-	labelConfig.isBold = true;
-	Widgets::Label::render(labelConfig);
+    {
+        LabelConfig labelConfig;
+        labelConfig.id = "##modelpresets";
+        labelConfig.label = "Model Presets";
+        labelConfig.icon = ICON_FA_BOX_OPEN;
+        labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
+        labelConfig.isBold = true;
+        Widgets::Label::render(labelConfig);
+    }
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -3942,79 +3960,85 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
     ImGui::SameLine();
 
     // Delete button
-	ButtonConfig deleteButtonConfig;
-	deleteButtonConfig.id = "##delete";
-	deleteButtonConfig.label = std::nullopt;
-	deleteButtonConfig.icon = ICON_FA_TRASH;
-	deleteButtonConfig.size = ImVec2(24, 0);
-	deleteButtonConfig.onClick = []()
-		{
-			if (g_presetManager->getPresets().size() > 1)
-			{ // Prevent deleting last preset
-				auto& currentPreset = g_presetManager->getCurrentPreset();
-				if (g_presetManager->deletePreset(currentPreset.name))
-				{
-					// Force reload presets after successful deletion
-					g_presetManager->loadPresets();
-				}
-			}
-		};
-	deleteButtonConfig.iconSolid = true;
-	deleteButtonConfig.backgroundColor = Config::Color::TRANSPARENT_COL;
-	deleteButtonConfig.hoverColor = RGBAToImVec4(191, 88, 86, 255);
-	deleteButtonConfig.activeColor = RGBAToImVec4(165, 29, 45, 255);
-	deleteButtonConfig.alignment = Alignment::CENTER;
-
-    // Only enable delete button if we have more than one preset
-    if (presets.size() <= 1)
     {
-        deleteButtonConfig.state = ButtonState::DISABLED;
-    }
+        ButtonConfig deleteButtonConfig;
+        deleteButtonConfig.id = "##delete";
+        deleteButtonConfig.label = std::nullopt;
+        deleteButtonConfig.icon = ICON_FA_TRASH;
+        deleteButtonConfig.size = ImVec2(24, 0);
+        deleteButtonConfig.onClick = []()
+            {
+                if (g_presetManager->getPresets().size() > 1)
+                { // Prevent deleting last preset
+                    auto& currentPreset = g_presetManager->getCurrentPreset();
+                    if (g_presetManager->deletePreset(currentPreset.name))
+                    {
+                        // Force reload presets after successful deletion
+                        g_presetManager->loadPresets();
+                    }
+                }
+            };
+        deleteButtonConfig.iconSolid = true;
+        deleteButtonConfig.backgroundColor = Config::Color::TRANSPARENT_COL;
+        deleteButtonConfig.hoverColor = RGBAToImVec4(191, 88, 86, 255);
+        deleteButtonConfig.activeColor = RGBAToImVec4(165, 29, 45, 255);
+        deleteButtonConfig.alignment = Alignment::CENTER;
 
-    Widgets::Button::render(deleteButtonConfig);
+        // Only enable delete button if we have more than one preset
+        if (presets.size() <= 1)
+        {
+            deleteButtonConfig.state = ButtonState::DISABLED;
+        }
+
+        Widgets::Button::render(deleteButtonConfig);
+
+	} // End of delete button
 
     ImGui::Spacing();
     ImGui::Spacing();
 
     // Save and Save as New buttons
-	ButtonConfig saveButtonConfig;
-	saveButtonConfig.id = "##save";
-	saveButtonConfig.label = "Save";
-	saveButtonConfig.icon = std::nullopt;
-	saveButtonConfig.size = ImVec2(sidebarWidth / 2 - 15, 0);
-	saveButtonConfig.onClick = []()
-		{
-			bool hasChanges = g_presetManager->hasUnsavedChanges();
-			if (hasChanges)
-			{
-				auto currentPreset = g_presetManager->getCurrentPreset();
-				bool saved = g_presetManager->savePreset(currentPreset);
-				std::cout << "Save result: " << (saved ? "success" : "failed") << std::endl;
-				if (saved)
-				{
-					g_presetManager->loadPresets();
-				}
-			}
-		};
-	saveButtonConfig.iconSolid = false;
-	saveButtonConfig.backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128);
-	saveButtonConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
-	saveButtonConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
-    
-    static bool showSaveAsDialog = false;
+    {
+        ButtonConfig saveButtonConfig;
+        saveButtonConfig.id = "##save";
+        saveButtonConfig.label = "Save";
+        saveButtonConfig.icon = std::nullopt;
+        saveButtonConfig.size = ImVec2(sidebarWidth / 2 - 15, 0);
+        saveButtonConfig.onClick = []()
+            {
+                bool hasChanges = g_presetManager->hasUnsavedChanges();
+                if (hasChanges)
+                {
+                    auto currentPreset = g_presetManager->getCurrentPreset();
+                    bool saved = g_presetManager->savePreset(currentPreset);
+                    std::cout << "Save result: " << (saved ? "success" : "failed") << std::endl;
+                    if (saved)
+                    {
+                        g_presetManager->loadPresets();
+                    }
+                }
+            };
+        saveButtonConfig.iconSolid = false;
+        saveButtonConfig.backgroundColor = g_presetManager->hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128);
+        saveButtonConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+        saveButtonConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
 
-	ButtonConfig saveAsNewButtonConfig;
-	saveAsNewButtonConfig.id = "##saveasnew";
-	saveAsNewButtonConfig.label = "Save as New";
-	saveAsNewButtonConfig.icon = std::nullopt;
-	saveAsNewButtonConfig.size = ImVec2(sidebarWidth / 2 - 15, 0);
-	saveAsNewButtonConfig.onClick = []()
-		{
-			showSaveAsDialog = true;
-		};
+        ButtonConfig saveAsNewButtonConfig;
+        saveAsNewButtonConfig.id = "##saveasnew";
+        saveAsNewButtonConfig.label = "Save as New";
+        saveAsNewButtonConfig.icon = std::nullopt;
+        saveAsNewButtonConfig.size = ImVec2(sidebarWidth / 2 - 15, 0);
+        saveAsNewButtonConfig.onClick = []()
+            {
+                showSaveAsDialog = true;
+            };
 
-    std::vector<ButtonConfig> buttons = {saveButtonConfig, saveAsNewButtonConfig};
-    Widgets::Button::renderGroup(buttons, 9, ImGui::GetCursorPosY(), 10);
+        std::vector<ButtonConfig> buttons = { saveButtonConfig, saveAsNewButtonConfig };
+
+		// Render the buttons
+        Widgets::Button::renderGroup(buttons, 9, ImGui::GetCursorPosY(), 10);
+
+	} // End of save and save as new buttons
 
     ImGui::Spacing();
     ImGui::Spacing();
@@ -4027,11 +4051,19 @@ void ModelPresetSidebar::renderModelPresetsSelection(const float sidebarWidth)
  */
 void ModelPresetSidebar::exportPresets()
 {
-    nfdu8char_t *outPath = nullptr;
-    nfdu8filteritem_t filters[2] = {{"JSON Files", "json"}};
+    // Initialize variables
+    nfdu8char_t* outPath = nullptr;
+    nfdu8filteritem_t filters[2] = { {"JSON Files", "json"} };
+
+    // Zero out the args struct
     nfdsavedialogu8args_t args;
+    memset(&args, 0, sizeof(nfdsavedialogu8args_t));
+
+    // Set up filter arguments
     args.filterList = filters;
-	args.filterCount = 1;
+    args.filterCount = 1;
+
+    // Show save dialog
     nfdresult_t result = NFD_SaveDialogU8_With(&outPath, &args);
 
     if (result == NFD_OKAY)
@@ -4047,28 +4079,24 @@ void ModelPresetSidebar::exportPresets()
         NFD_FreePathU8(outPath);
 
         // Save the preset to the chosen path
-        const auto &currentPreset = g_presetManager->getCurrentPreset();
+        const auto& currentPreset = g_presetManager->getCurrentPreset();
         bool success = g_presetManager->savePresetToPath(currentPreset, savePath.string());
 
         if (success)
         {
             std::cout << "Preset saved successfully to: " << savePath << std::endl;
-            // Optionally, display a success message in the UI
         }
         else
         {
             std::cerr << "Failed to save preset to: " << savePath << std::endl;
-            // Optionally, display an error message in the UI
         }
     }
     else if (result == NFD_CANCEL)
     {
-        // User canceled the dialog; no action needed
         std::cout << "Save dialog canceled by the user." << std::endl;
     }
     else
     {
-        // Handle error
         std::cerr << "Error from NFD: " << NFD_GetError() << std::endl;
     }
 }

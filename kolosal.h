@@ -410,6 +410,7 @@ extern std::unique_ptr<class ChatManager>   g_chatManager;
 extern std::unique_ptr<class PresetManager> g_presetManager;
 
 // textures
+extern GLuint      g_shaderProgram;
 extern GLuint      g_gradientTexture;
 extern const char* g_quadVertexShaderSource;
 extern const char* g_quadFragmentShaderSource;
@@ -682,7 +683,7 @@ namespace Widgets
 namespace ChatHistorySidebar
 {
     void render(float &sidebarWidth);
-    void renderChatHistoryList(float contentWidth);
+    void renderChatHistoryList(ImVec2 contentArea);
 } // namespace ChatHistorySidebar
 
 namespace ChatWindow
