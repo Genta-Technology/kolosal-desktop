@@ -159,6 +159,16 @@ target_compile_definitions(kolosal_lib PUBLIC
     KOLOSAL_LOGO_PATH="assets/logo.png"
 )
 
+# Add openssl
+find_package(OpenSSL REQUIRED)
+if(NOT OpenSSL_FOUND)
+    message(FATAL_ERROR "OpenSSL not found")
+else()
+    message(STATUS "Found OpenSSL: ${OPENSSL_INCLUDE_DIR}")
+endif()
+
+target_link_libraries(kolosal_lib PUBLIC OpenSSL::SSL)
+
 # Add GoogleTest
 include(FetchContent)
 FetchContent_Declare(

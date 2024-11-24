@@ -593,16 +593,23 @@ private:
 //-----------------------------------------------------------------------------
 
 // fonts and icons initialization
-auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*;
-auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*;
+namespace Fonts
+{
+    auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*;
+    auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*;
+} // namespace Fonts
 
 // gradient background
-void checkShaderCompileErrors(GLuint shader, const std::string& type);
-void checkProgramLinkErrors(GLuint program);
-void generateGradientTexture(int width, int height);
-auto compileShader(GLenum type, const char* source) -> GLuint;
-auto createShaderProgram(const char* vertexSource, const char* fragmentSource) -> GLuint;
-void setupFullScreenQuad();
+namespace GradientBackground
+{
+    void checkShaderCompileErrors(GLuint shader, const std::string& type);
+    void checkProgramLinkErrors(GLuint program);
+    void generateGradientTexture(int width, int height);
+    auto compileShader(GLenum type, const char* source) -> GLuint;
+    auto createShaderProgram(const char* vertexSource, const char* fragmentSource) -> GLuint;
+    void setupFullScreenQuad();
+    void renderGradientBackground(HWND hwnd, int display_w, int display_h, float transitionProgress, float easedProgress);
+} // namespace GradientBackground
 
 bool initializeOpenGL(HWND hwnd);
 void setupImGui(HWND hwnd);
@@ -675,7 +682,7 @@ namespace Widgets
 
     namespace ComboBox
     {
-        auto render(const char *label, const char **items, int itemsCount, int &selectedItem, float width) -> bool;
+        auto render(const char* label, const char** items, int itemsCount, int& selectedItem, float width, float height = 28) -> bool;
     } // namespace ComboBox
 
 } // namespace Widgets

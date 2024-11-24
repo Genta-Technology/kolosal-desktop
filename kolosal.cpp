@@ -581,8 +581,8 @@ auto ChatManager::renameCurrentChat(const std::string &newChatName) -> bool
 
     // Get the current chat and its old file path
     ChatHistory &currentChat = loadedChats[currentChatIndex];
-    std::string oldChatName = currentChat.name;
-    std::string oldFilePath = getChatFilePath(oldChatName);
+    std::string oldChatName  = currentChat.name;
+    std::string oldFilePath  = getChatFilePath(oldChatName);
 
     // Update the chat's name and save it under the new name
     currentChat.name = newChatName;
@@ -633,14 +633,21 @@ auto ChatManager::getChatFilePath(const std::string &chatName) const -> std::str
  */
 auto ChatManager::isValidChatName(const std::string &name) const -> bool
 {
-    if (name.empty() || name.length() > 255)
+    if (strlen(name.data()) == 0 || name.length() > 256)
     {
+		std::cerr << "Chat name is empty or too long: " << name << std::endl;
         return false;
     }
 
     // Check for invalid filesystem characters
     const std::string invalidChars = R"(<>:"/\|?*)";
-    return name.find_first_of(invalidChars) == std::string::npos;
+	if (name.find_first_of(invalidChars) != std::string::npos)
+	{
+		std::cerr << "Chat name contains invalid characters: " << name << std::endl;
+		return false;
+	}
+
+    return true;
 }
 
 /**
@@ -1167,13 +1174,13 @@ auto PresetManager::hasUnsavedChanges() const -> bool
     const ModelPreset &current = loadedPresets[currentPresetIndex];
     const ModelPreset &original = originalPresets[currentPresetIndex];
 
-    return current.name != original.name ||
-           current.systemPrompt != original.systemPrompt ||
-           current.temperature != original.temperature ||
-           current.top_p != original.top_p ||
-           current.top_k != original.top_k ||
-           current.random_seed != original.random_seed ||
-           current.min_length != original.min_length ||
+    return current.name           != original.name          ||
+           current.systemPrompt   != original.systemPrompt  ||
+           current.temperature    != original.temperature   ||
+           current.top_p          != original.top_p         ||
+           current.top_k          != original.top_k         ||
+           current.random_seed    != original.random_seed   ||
+           current.min_length     != original.min_length    ||
            current.max_new_tokens != original.max_new_tokens;
 }
 
@@ -1207,14 +1214,21 @@ auto PresetManager::getPresetFilePath(const std::string &presetName) const -> st
  */
 auto PresetManager::isValidPresetName(const std::string &name) const -> bool
 {
-    if (name.empty() || name.length() > 256) // 256 + 1 for null terminator
+    if (strlen(name.data()) == 0 || name.length() > 256) // 256 + 1 for null terminator
     {
+		std::cerr << "Preset name is empty or too long: " << name << std::endl;
         return false;
     }
 
     // Check for invalid filesystem characters
     const std::string invalidChars = R"(<>:"/\|?*)";
-    return name.find_first_of(invalidChars) == std::string::npos;
+	if (name.find_first_of(invalidChars) != std::string::npos)
+	{
+		std::cerr << "Preset name contains invalid characters: " << name << std::endl;
+		return false;
+	}
+
+    return true;
 }
 
 /**
@@ -1545,7 +1559,7 @@ auto BorderlessWindow::hit_test(POINT cursor) const -> LRESULT {
  *
  * This function loads a font from a file and adds it to the ImGui context.
  */
-auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*
+auto Fonts::LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*
 {
     ImFont* font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
     if (font == nullptr)
@@ -1566,7 +1580,7 @@ auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, floa
  *
  * This function loads an icon font from a file and adds it to the ImGui context.
  */
-auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*
+auto Fonts::LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*
 {
     static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
     ImFontConfig icons_config;
@@ -1595,7 +1609,7 @@ auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFo
 // [SECTION] Gradient Color Helper Functions
 //-----------------------------------------------------------------------------
 
-void checkShaderCompileErrors(GLuint shader, const std::string& type)
+void GradientBackground::checkShaderCompileErrors(GLuint shader, const std::string& type)
 {
     GLint success;
     GLchar infoLog[1024];
@@ -1611,7 +1625,7 @@ void checkShaderCompileErrors(GLuint shader, const std::string& type)
     }
 }
 
-void checkProgramLinkErrors(GLuint program)
+void GradientBackground::checkProgramLinkErrors(GLuint program)
 {
     GLint success;
     GLchar infoLog[1024];
@@ -1624,7 +1638,7 @@ void checkProgramLinkErrors(GLuint program)
     }
 }
 
-void generateGradientTexture(int width, int height)
+void GradientBackground::generateGradientTexture(int width, int height)
 {
     // Delete the existing texture if it exists
     if (g_gradientTexture != 0)
@@ -1681,7 +1695,7 @@ void generateGradientTexture(int width, int height)
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-auto compileShader(GLenum type, const char* source) -> GLuint
+auto GradientBackground::compileShader(GLenum type, const char* source) -> GLuint
 {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
@@ -1693,7 +1707,7 @@ auto compileShader(GLenum type, const char* source) -> GLuint
     return shader;
 }
 
-auto createShaderProgram(const char* vertexSource, const char* fragmentSource) -> GLuint
+auto GradientBackground::createShaderProgram(const char* vertexSource, const char* fragmentSource) -> GLuint
 {
     GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexSource);
     GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentSource);
@@ -1714,7 +1728,7 @@ auto createShaderProgram(const char* vertexSource, const char* fragmentSource) -
     return program;
 }
 
-void setupFullScreenQuad()
+void GradientBackground::setupFullScreenQuad()
 {
     float quadVertices[] = {
         // Positions    // Texture Coords
@@ -1754,7 +1768,7 @@ void setupFullScreenQuad()
     glBindVertexArray(0);
 }
 
-void renderGradientBackcground(HWND hwnd, int display_w, int display_h, float transitionProgress, float easedProgress)
+void GradientBackground::renderGradientBackground(HWND hwnd, int display_w, int display_h, float transitionProgress, float easedProgress)
 {
     // Get the framebuffer size
     RECT newRect;
@@ -1904,16 +1918,16 @@ void setupImGui(HWND hwnd) {
     ImGuiIO& imguiIO = ImGui::GetIO();
 
     // Load fonts and set up styles
-    g_mdFonts.regular = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR, imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.bold = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.italic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.boldItalic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, g_mdFonts.bold, Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.code = LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, g_mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.regular    = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR,    imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.bold       = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD,       g_mdFonts.regular,               Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.italic     = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC,     g_mdFonts.regular,               Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.boldItalic = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, g_mdFonts.bold,                  Config::Font::DEFAULT_FONT_SIZE);
+    g_mdFonts.code       = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, g_mdFonts.regular,               Config::Font::DEFAULT_FONT_SIZE);
 
     // Load icon fonts
-    g_iconFonts.regular = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_REGULAR, Config::Icon::DEFAULT_FONT_SIZE);
-    g_iconFonts.solid = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_SOLID, Config::Icon::DEFAULT_FONT_SIZE);
-    g_iconFonts.brands = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS, Config::Icon::DEFAULT_FONT_SIZE);
+    g_iconFonts.regular  = Fonts::LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_REGULAR, Config::Icon::DEFAULT_FONT_SIZE);
+    g_iconFonts.solid    = Fonts::LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_SOLID,   Config::Icon::DEFAULT_FONT_SIZE);
+    g_iconFonts.brands   = Fonts::LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS,  Config::Icon::DEFAULT_FONT_SIZE);
 
     imguiIO.FontDefault = g_mdFonts.regular;
 
@@ -2000,125 +2014,141 @@ void titleBar(HWND hwnd)
         }
     }
 
-    float buttonWidth = 45.0f; // Adjust as needed
-    float buttonHeight = Config::TITLE_BAR_HEIGHT; // Same as the title bar height
-    float buttonSpacing = 0.0f; // No spacing
-    float x = io.DisplaySize.x - buttonWidth * 3;
-    float y = 0.0f;
-
-    // Style variables for hover effects
-    ImU32 hoverColor = IM_COL32(255, 255, 255, (int)(255 * 0.3f)); // Adjust alpha as needed
-    ImU32 closeHoverColor = IM_COL32(232, 17, 35, (int)(255 * 0.5f)); // Red color for close button
-
-    // Minimize button
-    ImGui::SetCursorPos(ImVec2(x, y));
-    ImGui::PushID("MinimizeButton");
-    if (ImGui::InvisibleButton("##MinimizeButton", ImVec2(buttonWidth, buttonHeight)))
+    // Title Bar Buttons
     {
-        // Handle minimize
-        ShowWindow(hwnd, SW_MINIMIZE);
-    }
+        float buttonWidth = 45.0f; // Adjust as needed
+        float buttonHeight = Config::TITLE_BAR_HEIGHT; // Same as the title bar height
+        float buttonSpacing = 0.0f; // No spacing
+        float x = io.DisplaySize.x - buttonWidth * 3;
+        float y = 0.0f;
 
-    // Hover effect
-    if (ImGui::IsItemHovered())
-    {
-        ImVec2 p_min = ImGui::GetItemRectMin();
-        ImVec2 p_max = ImGui::GetItemRectMax();
-        draw_list->AddRectFilled(p_min, p_max, hoverColor);
-    }
+        // Style variables for hover effects
+        ImU32 hoverColor = IM_COL32(255, 255, 255, (int)(255 * 0.3f)); // Adjust alpha as needed
+        ImU32 closeHoverColor = IM_COL32(232, 17, 35, (int)(255 * 0.5f)); // Red color for close button
 
-    // Render minimize icon
-    {
-        ImVec2 iconPos = ImGui::GetItemRectMin();
-        iconPos.x += ((buttonWidth - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).x) / 2.0f) - 2.5;
-        iconPos.y += ((buttonHeight - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).y) / 2.0f) - 5;
+        // Minimize button
+        {
+            ImGui::SetCursorPos(ImVec2(x, y));
+            ImGui::PushID("MinimizeButton");
+            if (ImGui::InvisibleButton("##MinimizeButton", ImVec2(buttonWidth, buttonHeight)))
+            {
+                // Handle minimize
+                ShowWindow(hwnd, SW_MINIMIZE);
+            }
 
-        // Select icon font
-        ImGui::PushFont(g_iconFonts.regular);
-        draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), ICON_FA_WINDOW_MINIMIZE);
-        ImGui::PopFont();
-    }
-    ImGui::PopID();
+            // Hover effect
+            if (ImGui::IsItemHovered())
+            {
+                ImVec2 p_min = ImGui::GetItemRectMin();
+                ImVec2 p_max = ImGui::GetItemRectMax();
+                draw_list->AddRectFilled(p_min, p_max, hoverColor);
+            }
 
-    x += buttonWidth + buttonSpacing;
+            // Render minimize icon
+            {
+                ImVec2 iconPos = ImGui::GetItemRectMin();
+                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).x) / 2.0f) - 2.5;
+                iconPos.y += ((buttonHeight - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).y) / 2.0f) - 5;
 
-    // Maximize/Restore button
-    ImGui::SetCursorPos(ImVec2(x, y));
-    ImGui::PushID("MaximizeButton");
-    if (ImGui::InvisibleButton("##MaximizeButton", ImVec2(buttonWidth, buttonHeight)))
-    {
-        // Handle maximize/restore
-        if (IsZoomed(hwnd))
-            ShowWindow(hwnd, SW_RESTORE);
-        else
-            ShowWindow(hwnd, SW_MAXIMIZE);
-    }
+                // Select icon font
+                ImGui::PushFont(g_iconFonts.regular);
+                draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), ICON_FA_WINDOW_MINIMIZE);
+                ImGui::PopFont();
+            }
 
-    // Hover effect
-    if (ImGui::IsItemHovered())
-    {
-        ImVec2 p_min = ImGui::GetItemRectMin();
-        ImVec2 p_max = ImGui::GetItemRectMax();
-        draw_list->AddRectFilled(p_min, p_max, hoverColor);
-    }
+            ImGui::PopID();
 
-    // Render maximize or restore icon
-    {
-        const char* icon = IsZoomed(hwnd) ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE;
-        ImVec2 iconPos = ImGui::GetItemRectMin();
-        iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 2.5;
-        iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
+        } // Minimize button
 
-        // Select icon font
-        ImGui::PushFont(g_iconFonts.regular);
-        draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), icon);
-        ImGui::PopFont();
-    }
-    ImGui::PopID();
+        // Maximize/Restore button
+        {
+            x += buttonWidth + buttonSpacing;
 
-    x += buttonWidth + buttonSpacing;
+            // Maximize/Restore button
+            ImGui::SetCursorPos(ImVec2(x, y));
+            ImGui::PushID("MaximizeButton");
+            if (ImGui::InvisibleButton("##MaximizeButton", ImVec2(buttonWidth, buttonHeight)))
+            {
+                // Handle maximize/restore
+                if (IsZoomed(hwnd))
+                    ShowWindow(hwnd, SW_RESTORE);
+                else
+                    ShowWindow(hwnd, SW_MAXIMIZE);
+            }
 
-    // Close button
-    ImGui::SetCursorPos(ImVec2(x, y));
-    ImGui::PushID("CloseButton");
-    if (ImGui::InvisibleButton("##CloseButton", ImVec2(buttonWidth, buttonHeight)))
-    {
-        // Handle close
-        PostMessage(hwnd, WM_CLOSE, 0, 0);
-    }
+            // Hover effect
+            if (ImGui::IsItemHovered())
+            {
+                ImVec2 p_min = ImGui::GetItemRectMin();
+                ImVec2 p_max = ImGui::GetItemRectMax();
+                draw_list->AddRectFilled(p_min, p_max, hoverColor);
+            }
 
-    // Hover effect
-    if (ImGui::IsItemHovered())
-    {
-        ImVec2 p_min = ImGui::GetItemRectMin();
-        ImVec2 p_max = ImGui::GetItemRectMax();
-        draw_list->AddRectFilled(p_min, p_max, closeHoverColor);
-    }
+            // Render maximize or restore icon
+            {
+                const char* icon = IsZoomed(hwnd) ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE;
+                ImVec2 iconPos = ImGui::GetItemRectMin();
+                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 2.5;
+                iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
 
-    // Render close icon
-    {
-        ImVec2 p_min = ImGui::GetItemRectMin();
-        ImVec2 p_max = ImGui::GetItemRectMax();
-        float padding = 18.0F;
-        ImU32 symbol_color = IM_COL32(255, 255, 255, 255);
-        float thickness = 1.0f;
+                // Select icon font
+                ImGui::PushFont(g_iconFonts.regular);
+                draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), icon);
+                ImGui::PopFont();
+            }
 
-        draw_list->AddLine(
-            ImVec2(p_min.x + padding - 2, p_min.y + padding + 1),
-            ImVec2(p_max.x - padding + 2, p_max.y - padding),
-            symbol_color,
-            thickness
-        );
+            ImGui::PopID();
 
-        draw_list->AddLine(
-            ImVec2(p_max.x - padding + 2, p_min.y + padding),
-            ImVec2(p_min.x + padding - 2, p_max.y - padding - 1),
-            symbol_color,
-            thickness
-        );
-    }
+        } // Maximize/Restore button
 
-    ImGui::PopID();
+        // Close button
+        {
+            x += buttonWidth + buttonSpacing;
+
+            ImGui::SetCursorPos(ImVec2(x, y));
+            ImGui::PushID("CloseButton");
+            if (ImGui::InvisibleButton("##CloseButton", ImVec2(buttonWidth, buttonHeight)))
+            {
+                // Handle close
+                PostMessage(hwnd, WM_CLOSE, 0, 0);
+            }
+
+            // Hover effect
+            if (ImGui::IsItemHovered())
+            {
+                ImVec2 p_min = ImGui::GetItemRectMin();
+                ImVec2 p_max = ImGui::GetItemRectMax();
+                draw_list->AddRectFilled(p_min, p_max, closeHoverColor);
+            }
+
+            // Render close icon
+            {
+                ImVec2 p_min = ImGui::GetItemRectMin();
+                ImVec2 p_max = ImGui::GetItemRectMax();
+                float padding = 18.0F;
+                ImU32 symbol_color = IM_COL32(255, 255, 255, 255);
+                float thickness = 1.0f;
+
+                draw_list->AddLine(
+                    ImVec2(p_min.x + padding - 2, p_min.y + padding + 1),
+                    ImVec2(p_max.x - padding + 2, p_max.y - padding),
+                    symbol_color,
+                    thickness
+                );
+
+                draw_list->AddLine(
+                    ImVec2(p_max.x - padding + 2, p_min.y + padding),
+                    ImVec2(p_min.x + padding - 2, p_max.y - padding - 1),
+                    symbol_color,
+                    thickness
+                );
+            }
+
+            ImGui::PopID();
+
+        } // Close button
+
+	} // Title Bar Buttons
 
     ImGui::End();
     ImGui::PopStyleVar(3);
@@ -2156,14 +2186,10 @@ void mainLoop(HWND hwnd)
         display_h = 720;
     }
 
-    // Create gradient texture
-    generateGradientTexture(display_w, display_h);
-
-    // Create shader program
-    g_shaderProgram = createShaderProgram(g_quadVertexShaderSource, g_quadFragmentShaderSource);
-
-    // Setup full-screen quad
-    setupFullScreenQuad();
+	// Gradient background setup
+    GradientBackground::generateGradientTexture(display_w, display_h);
+    g_shaderProgram = GradientBackground::createShaderProgram(g_quadVertexShaderSource, g_quadFragmentShaderSource);
+    GradientBackground::setupFullScreenQuad();
 
     // Transition variables on/off focus
     float transitionProgress = 0.0f;
@@ -2174,7 +2200,7 @@ void mainLoop(HWND hwnd)
     bool previousActiveState = g_borderlessWindow->isActive();
 
     MSG msg = { 0 };
-    const double targetFrameTime = 1.0 / 30.0; // Target frame time in seconds (for 30 FPS)
+    const double targetFrameTime = 1.0 / 60.0; // Target frame time in seconds (for 30 FPS)
 
     while (msg.message != WM_QUIT) {
         auto frameStartTime = std::chrono::high_resolution_clock::now();
@@ -2251,7 +2277,7 @@ void mainLoop(HWND hwnd)
         // Render the ImGui frame
         ImGui::Render();
 
-        renderGradientBackcground(hwnd, display_w, display_h, transitionProgress, easedProgress);
+        GradientBackground::renderGradientBackground(hwnd, display_w, display_h, transitionProgress, easedProgress);
 
         // Render ImGui draw data
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -3139,20 +3165,26 @@ void Widgets::IntInputField::render(const char *label, int &value, const float i
  * @param width The width of the combo box.
  * @return bool True if the selected item has changed, false otherwise.
  */
-auto Widgets::ComboBox::render(const char *label, const char **items, int itemsCount, int &selectedItem, float width) -> bool
+auto Widgets::ComboBox::render(const char* label, const char** items, int itemsCount, int& selectedItem, float width, float height) -> bool
 {
-    // Push style variables for rounded corners
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::ComboBox::FRAME_ROUNDING); // Round the frame corners
-    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Config::ComboBox::POPUP_ROUNDING); // Round the popup corners
+    // Calculate frame padding based on desired height
+    ImVec2 framePadding = ImGui::GetStyle().FramePadding;
+    float defaultHeight = ImGui::GetFrameHeight(); // Default frame height
+    framePadding.y = (height - defaultHeight) * 0.5f; // Adjust vertical padding to achieve desired height
+
+    // Push style variables for frame and popup rounding
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::ComboBox::FRAME_ROUNDING);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Config::ComboBox::POPUP_ROUNDING);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  framePadding); // Adjust button height through padding
 
     // Push style colors
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, Config::ComboBox::COMBO_BG_COLOR);             // ComboBox background
-    ImGui::PushStyleColor(ImGuiCol_Border, Config::ComboBox::COMBO_BORDER_COLOR);          // ComboBox border
-    ImGui::PushStyleColor(ImGuiCol_Text, Config::ComboBox::TEXT_COLOR);                    // ComboBox text
-    ImGui::PushStyleColor(ImGuiCol_Button, Config::ComboBox::COMBO_BG_COLOR);              // Button background
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Config::ComboBox::BUTTON_HOVERED_COLOR); // Button hovered
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, Config::ComboBox::BUTTON_ACTIVE_COLOR);   // Button active
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, Config::ComboBox::POPUP_BG_COLOR);             // Popup background
+    ImGui::PushStyleColor(ImGuiCol_FrameBg,       Config::ComboBox::COMBO_BG_COLOR);
+    ImGui::PushStyleColor(ImGuiCol_Border,        Config::ComboBox::COMBO_BORDER_COLOR);
+    ImGui::PushStyleColor(ImGuiCol_Text,          Config::ComboBox::TEXT_COLOR);
+    ImGui::PushStyleColor(ImGuiCol_Button,        Config::ComboBox::COMBO_BG_COLOR);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Config::ComboBox::BUTTON_HOVERED_COLOR);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  Config::ComboBox::BUTTON_ACTIVE_COLOR);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg,       Config::ComboBox::POPUP_BG_COLOR);
 
     // Set the ComboBox width
     ImGui::SetNextItemWidth(width);
@@ -3180,7 +3212,7 @@ auto Widgets::ComboBox::render(const char *label, const char **items, int itemsC
 
     // Pop style colors and variables to revert to previous styles
     ImGui::PopStyleColor(7); // Number of colors pushed
-    ImGui::PopStyleVar(2);   // Number of style vars pushed
+    ImGui::PopStyleVar(3);   // Number of style vars pushed (FrameRounding, PopupRounding, FramePadding)
 
     return changed; // Return true if the selected item has changed
 }
@@ -3219,11 +3251,11 @@ void ChatWindow::MessageBubble::pushIDAndColors(const Message msg, int index)
  */
 auto ChatWindow::MessageBubble::calculateDimensions(const Message msg, float windowWidth) -> std::tuple<float, float, float>
 {
-    float bubbleWidth = windowWidth * Config::Bubble::WIDTH_RATIO; // 75% width for both user and bot
+    float bubbleWidth = msg.role == "user" ? windowWidth * Config::Bubble::WIDTH_RATIO : windowWidth; // 75% width for user and 100% bot
     float bubblePadding = Config::Bubble::PADDING;                 // Padding inside the bubble
     float paddingX = msg.role == "user"
-                         ? (windowWidth - bubbleWidth - Config::Bubble::RIGHT_PADDING)
-                         : Config::Bubble::BOT_PADDING_X;
+                     ? (windowWidth - bubbleWidth - Config::Bubble::RIGHT_PADDING)
+                     : 0;
 
     return {bubbleWidth, bubblePadding, paddingX};
 }
@@ -3427,7 +3459,7 @@ void ChatWindow::renderRenameChatDialog(bool &showRenameChatDialog)
     }
 
     // Change the window title background color
-    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.125F, 0.125F, 0.125F, 1.0F));       // Inactive state color
+    ImGui::PushStyleColor(ImGuiCol_TitleBg,       ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Inactive state color
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
 
     // Apply rounded corners to the window
@@ -3540,20 +3572,27 @@ void ChatWindow::render(float inputHeight, float leftSidebarWidth, float rightSi
     float availableWidth = ImGui::GetContentRegionAvail().x;
     float contentWidth = (availableWidth < Config::CHAT_WINDOW_CONTENT_WIDTH) ? availableWidth : Config::CHAT_WINDOW_CONTENT_WIDTH;
     float paddingX = (availableWidth - contentWidth) / 2.0F;
-    float renameButtonWidth = 128.0F;
+    float renameButtonWidth = contentWidth;
     static bool showRenameChatDialog = false;
+
+	// Center the rename button horizontally
+    if (paddingX > 0.0F)
+    {
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + paddingX);
+    }
 
     // Render the rename button
 	ButtonConfig renameButtonConfig;
 	renameButtonConfig.id = "##renameChat";
 	renameButtonConfig.label = g_chatManager->getCurrentChatHistory().name;
-	renameButtonConfig.size = ImVec2(renameButtonWidth, 0);
+	renameButtonConfig.size = ImVec2(renameButtonWidth, 30);
 	renameButtonConfig.gap = 10.0F;
 	renameButtonConfig.onClick = []()
 		{
 			showRenameChatDialog = true;
 		};
-	renameButtonConfig.alignment = Alignment::LEFT;
+	renameButtonConfig.alignment = Alignment::CENTER;
+	renameButtonConfig.hoverColor = ImVec4(0.1, 0.1, 0.1, 0.5);
     Widgets::Button::render(renameButtonConfig);
 
     // Render the rename chat dialog
