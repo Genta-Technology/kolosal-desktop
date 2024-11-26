@@ -81,6 +81,7 @@ add_library(kolosal_lib STATIC
 target_compile_definitions(kolosal_lib PUBLIC
     CHAT_HISTORY_DIRECTORY="${CMAKE_SOURCE_DIR}/chat_history"
     PRESETS_DIRECTORY="${CMAKE_SOURCE_DIR}/presets"
+    CONFIG_PATH="${CMAKE_SOURCE_DIR}/config.json"
 )
 
 target_include_directories(kolosal_lib PUBLIC
