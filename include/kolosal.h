@@ -148,8 +148,6 @@ extern HGLRC                                   g_openglContext;
 extern HDC                                     g_deviceContext;
 
 // ImGui context
-extern MarkdownFonts                        g_mdFonts;
-extern IconFonts                            g_iconFonts;
 extern std::unique_ptr<class PresetManager> g_presetManager;
 
 // textures
@@ -277,13 +275,6 @@ private:
 //-----------------------------------------------------------------------------
 // [SECTION] Function Prototypes
 //-----------------------------------------------------------------------------
-
-// fonts and icons initialization
-namespace Fonts
-{
-    auto LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*;
-    auto LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*;
-} // namespace Fonts
 
 // gradient background
 namespace GradientBackground

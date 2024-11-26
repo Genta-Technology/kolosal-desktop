@@ -5,7 +5,7 @@
 #include "ui/widgets.hpp"
 #include "chat/chat_manager.hpp"
 
-void pushIDAndColors(const Chat::Message msg, int index)
+inline void pushIDAndColors(const Chat::Message msg, int index)
 {
     ImGui::PushID(index);
 
@@ -26,7 +26,7 @@ void pushIDAndColors(const Chat::Message msg, int index)
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0F, 1.0F, 1.0F, 1.0F)); // White text
 }
 
-auto calculateDimensions(const Chat::Message msg, float windowWidth) -> std::tuple<float, float, float>
+inline auto calculateDimensions(const Chat::Message msg, float windowWidth) -> std::tuple<float, float, float>
 {
     float bubbleWidth = windowWidth * Config::Bubble::WIDTH_RATIO;
     float bubblePadding = Config::Bubble::PADDING;
@@ -41,7 +41,7 @@ auto calculateDimensions(const Chat::Message msg, float windowWidth) -> std::tup
     return { bubbleWidth, bubblePadding, paddingX };
 }
 
-void renderMessageContent(const Chat::Message msg, float bubbleWidth, float bubblePadding)
+inline void renderMessageContent(const Chat::Message msg, float bubbleWidth, float bubblePadding)
 {
     ImGui::SetCursorPosX(bubblePadding);
     ImGui::SetCursorPosY(bubblePadding);
@@ -50,7 +50,7 @@ void renderMessageContent(const Chat::Message msg, float bubbleWidth, float bubb
     ImGui::PopTextWrapPos();
 }
 
-void renderTimestamp(const Chat::Message msg, float bubblePadding)
+inline void renderTimestamp(const Chat::Message msg, float bubblePadding)
 {
     // Set timestamp color to a lighter gray
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7F, 0.7F, 0.7F, 1.0F)); // Light gray for timestamp
@@ -63,7 +63,7 @@ void renderTimestamp(const Chat::Message msg, float bubblePadding)
     ImGui::PopStyleColor(); // Restore original text color
 }
 
-void renderButtons(const Chat::Message msg, int index, float bubbleWidth, float bubblePadding)
+inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth, float bubblePadding)
 {
     ImVec2 textSize = ImGui::CalcTextSize(msg.content.c_str(), nullptr, true, bubbleWidth - bubblePadding * 2);
     float buttonPosY = textSize.y + bubblePadding;
@@ -118,7 +118,7 @@ void renderButtons(const Chat::Message msg, int index, float bubbleWidth, float 
     }
 }
 
-void renderMessage(const Chat::Message& msg, int index, float contentWidth)
+inline void renderMessage(const Chat::Message& msg, int index, float contentWidth)
 {
     pushIDAndColors(msg, index);
     float windowWidth = contentWidth;
@@ -159,7 +159,7 @@ void renderMessage(const Chat::Message& msg, int index, float contentWidth)
     ImGui::Spacing();
 }
 
-void renderChatHistory(const Chat::ChatHistory chatHistory, float contentWidth)
+inline void renderChatHistory(const Chat::ChatHistory chatHistory, float contentWidth)
 {
     static size_t lastMessageCount = 0;
     size_t currentMessageCount = chatHistory.messages.size();
@@ -191,7 +191,7 @@ void renderChatHistory(const Chat::ChatHistory chatHistory, float contentWidth)
 
 static std::string newChatName;
 
-void renderRenameChatDialog(bool& showRenameChatDialog)
+inline void renderRenameChatDialog(bool& showRenameChatDialog)
 {
     if (showRenameChatDialog)
     {
@@ -283,7 +283,7 @@ void renderRenameChatDialog(bool& showRenameChatDialog)
     ImGui::PopStyleVar();
 }
 
-void renderInputField(float inputHeight, float inputWidth)
+inline void renderInputField(float inputHeight, float inputWidth)
 {
     static std::string inputTextBuffer(Config::InputField::TEXT_SIZE, '\0');
     static bool focusInputField = true;
@@ -338,7 +338,7 @@ void renderInputField(float inputHeight, float inputWidth)
     InputField::renderMultiline(inputConfig);
 }
 
-void renderChatWindow(float inputHeight, float leftSidebarWidth, float rightSidebarWidth)
+inline void renderChatWindow(float inputHeight, float leftSidebarWidth, float rightSidebarWidth)
 {
     ImGuiIO& imguiIO = ImGui::GetIO();
 

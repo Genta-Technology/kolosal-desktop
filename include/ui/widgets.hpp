@@ -117,11 +117,11 @@ namespace Label
             // Select font based on icon style
             if (config.iconSolid.value())
             {
-                ImGui::PushFont(g_iconFonts.solid);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::SOLID));
             }
             else
             {
-                ImGui::PushFont(g_iconFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
             }
 
             // Render icon
@@ -134,11 +134,11 @@ namespace Label
         // Render label text with specified font weight
         if (config.isBold.value())
         {
-            ImGui::PushFont(g_mdFonts.bold);
+            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::BOLD));
         }
         else
         {
-            ImGui::PushFont(g_mdFonts.regular);
+            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::REGULAR));
         }
 
         ImGui::Text("%s", config.label.c_str());
@@ -173,11 +173,11 @@ namespace Label
         {
             if (config.iconSolid.value())
             {
-                ImGui::PushFont(g_iconFonts.solid);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::SOLID));
             }
             else
             {
-                ImGui::PushFont(g_iconFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
             }
             iconSize = ImGui::CalcTextSize(config.icon.value().c_str());
             ImGui::PopFont();
@@ -196,11 +196,11 @@ namespace Label
         {
             if (config.isBold.value())
             {
-                ImGui::PushFont(g_mdFonts.bold);
+                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::BOLD));
             }
             else
             {
-                ImGui::PushFont(g_mdFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::REGULAR));
             }
 
             labelSize = ImGui::CalcTextSize(config.label.c_str());
@@ -274,11 +274,11 @@ namespace Label
         {
             if (config.iconSolid.value())
             {
-                ImGui::PushFont(g_iconFonts.solid);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::SOLID));
             }
             else
             {
-                ImGui::PushFont(g_iconFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
             }
 
             ImGui::TextUnformatted(config.icon.value().c_str());
@@ -295,11 +295,11 @@ namespace Label
         {
             if (config.isBold.value())
             {
-                ImGui::PushFont(g_mdFonts.bold);
+                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::BOLD));
             }
             else
             {
-                ImGui::PushFont(g_mdFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::REGULAR));
             }
 
             ImGui::TextUnformatted(truncatedLabel.c_str());

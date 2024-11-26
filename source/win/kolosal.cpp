@@ -27,6 +27,7 @@
 #include "kolosal.h"
 #include "chat/chat_manager.hpp"
 #include "config.hpp"
+#include "ui/fonts.hpp"
 #include "ui/widgets.hpp"
 #include "ui/chat/chat_history_sidebar.hpp"
 #include "ui/chat/chat_section.hpp"
@@ -52,8 +53,6 @@ std::unique_ptr<BorderlessWindow> g_borderlessWindow;
 HGLRC                             g_openglContext = nullptr;
 HDC                               g_deviceContext = nullptr;
 
-MarkdownFonts                     g_mdFonts;
-IconFonts                         g_iconFonts;
 std::unique_ptr<PresetManager>    g_presetManager;
 
 //-----------------------------------------------------------------------------
@@ -814,69 +813,6 @@ auto BorderlessWindow::hit_test(POINT cursor) const -> LRESULT {
 }
 
 //-----------------------------------------------------------------------------
-// [SECTION] Font and Icon Font Loading Functions
-//-----------------------------------------------------------------------------
-
-
-/**
- * @brief Loads a font from a file and adds it to the ImGui context.
- * @param imguiIO The ImGuiIO object containing the font data.
- * @param fontPath The path to the font file.
- * @param fallbackFont The fallback font to use if loading fails.
- * @param fontSize The size of the font.
- * @return The loaded font, or the fallback font if loading fails.
- * @note If loading fails, an error message is printed to the standard error stream.
- * @note The fallback font is used if the loaded font is nullptr.
- *
- * This function loads a font from a file and adds it to the ImGui context.
- */
-auto Fonts::LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) -> ImFont*
-{
-    ImFont* font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
-    if (font == nullptr)
-    {
-        std::cerr << "Failed to load font: " << fontPath << std::endl;
-        return fallbackFont;
-    }
-    return font;
-}
-
-/**
- * @brief Loads an icon font from a file and adds it to the ImGui context.
- * @param io The ImGuiIO object containing the font data.
- * @param iconFontPath The path to the icon font file.
- * @param fontSize The size of the font.
- * @return The loaded icon font, or the regular font if loading fails.
- * @note If loading fails, an error message is printed to the standard error stream.
- *
- * This function loads an icon font from a file and adds it to the ImGui context.
- */
-auto Fonts::LoadIconFont(ImGuiIO& io, const char* iconFontPath, float fontSize) -> ImFont*
-{
-    static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
-    ImFontConfig icons_config;
-    icons_config.MergeMode = true;            // Enable merging
-    icons_config.PixelSnapH = true;           // Enable pixel snapping
-    icons_config.GlyphMinAdvanceX = fontSize; // Use fontSize as min advance x
-
-    // First load the regular font if not already loaded
-    if (!g_mdFonts.regular)
-    {
-        g_mdFonts.regular = LoadFont(io, IMGUI_FONT_PATH_INTER_REGULAR, io.Fonts->AddFontDefault(), fontSize);
-    }
-
-    // Load and merge icon font
-    ImFont* iconFont = io.Fonts->AddFontFromFileTTF(iconFontPath, fontSize, &icons_config, icons_ranges);
-    if (iconFont == nullptr)
-    {
-        std::cerr << "Failed to load icon font: " << iconFontPath << std::endl;
-        return g_mdFonts.regular;
-    }
-
-    return iconFont;
-}
-
-//-----------------------------------------------------------------------------
 // [SECTION] Gradient Color Helper Functions
 //-----------------------------------------------------------------------------
 
@@ -1188,19 +1124,7 @@ void setupImGui(HWND hwnd) {
     ImGui::CreateContext();
     ImGuiIO& imguiIO = ImGui::GetIO();
 
-    // Load fonts and set up styles
-    g_mdFonts.regular    = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR,    imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.bold       = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD,       g_mdFonts.regular,               Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.italic     = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC,     g_mdFonts.regular,               Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.boldItalic = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, g_mdFonts.bold,                  Config::Font::DEFAULT_FONT_SIZE);
-    g_mdFonts.code       = Fonts::LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, g_mdFonts.regular,               Config::Font::DEFAULT_FONT_SIZE);
-
-    // Load icon fonts
-    g_iconFonts.regular  = Fonts::LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_REGULAR, Config::Icon::DEFAULT_FONT_SIZE);
-    g_iconFonts.solid    = Fonts::LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_SOLID,   Config::Icon::DEFAULT_FONT_SIZE);
-    g_iconFonts.brands   = Fonts::LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS,  Config::Icon::DEFAULT_FONT_SIZE);
-
-    imguiIO.FontDefault = g_mdFonts.regular;
+    FontsManager::GetInstance().LoadFonts(imguiIO);
 
     // Enable power save mode
     imguiIO.ConfigFlags |= ImGuiConfigFlags_EnablePowerSavingMode;
@@ -1322,7 +1246,7 @@ void titleBar(HWND hwnd)
                 iconPos.y += ((buttonHeight - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).y) / 2.0f) - 5;
 
                 // Select icon font
-                ImGui::PushFont(g_iconFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
                 draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), ICON_FA_WINDOW_MINIMIZE);
                 ImGui::PopFont();
             }
@@ -1363,7 +1287,7 @@ void titleBar(HWND hwnd)
                 iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
 
                 // Select icon font
-                ImGui::PushFont(g_iconFonts.regular);
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
                 draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), icon);
                 ImGui::PopFont();
             }
@@ -1448,11 +1372,13 @@ void mainLoop(HWND hwnd)
     // Get initial window size
     int display_w, display_h;
     RECT rect;
-    if (GetClientRect(hwnd, &rect)) {
+    if (GetClientRect(hwnd, &rect)) 
+    {
         display_w = rect.right - rect.left;
         display_h = rect.bottom - rect.top;
     }
-    else {
+    else 
+    {
         display_w = 1280;
         display_h = 720;
     }

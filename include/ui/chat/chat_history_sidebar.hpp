@@ -5,7 +5,7 @@
 #include "ui/widgets.hpp"
 #include "chat/chat_manager.hpp"
 
-void renderChatHistoryList(ImVec2 contentArea)
+inline void renderChatHistoryList(ImVec2 contentArea)
 {
     // Render chat history buttons scroll region
     ImGui::BeginChild("ChatHistoryButtons", contentArea, false, ImGuiWindowFlags_NoScrollbar);
@@ -47,7 +47,7 @@ void renderChatHistoryList(ImVec2 contentArea)
     ImGui::EndChild();
 }
 
-void renderChatHistorySidebar(float& sidebarWidth)
+inline void renderChatHistorySidebar(float& sidebarWidth)
 {
     ImGuiIO& io = ImGui::GetIO();
     const float sidebarHeight = io.DisplaySize.y - Config::TITLE_BAR_HEIGHT;

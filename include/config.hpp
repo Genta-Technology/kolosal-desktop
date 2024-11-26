@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+
+// TODO: Need to refactor this to use json file that is modifiable by the user in realtime
 namespace Config
 {
     // Global constants for padding
