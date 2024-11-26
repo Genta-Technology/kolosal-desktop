@@ -1,55 +1,103 @@
+# Minimum CMake version and project definition
 cmake_minimum_required(VERSION 3.10)
 project(KolosalDesktop)
+
+# Global settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Enable compile_commands.json generation
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Find OpenGL
+# Define source directories
+set(EXTERNAL_DIR ${CMAKE_SOURCE_DIR}/external)
+set(IMGUI_DIR ${EXTERNAL_DIR}/imgui)
+set(FONT_FOLDER_PATH ${EXTERNAL_DIR}/fonts)
+
+# ==== External Dependencies ====
+
+# OpenGL
 find_package(OpenGL REQUIRED)
 if(NOT OpenGL_FOUND)
     message(FATAL_ERROR "OpenGL not found")
-else()
-    message(STATUS "Found OpenGL: ${OpenGL_INCLUDE_DIR}")
 endif()
+message(STATUS "Found OpenGL: ${OpenGL_INCLUDE_DIR}")
 
-# Add GLAD
-add_library(glad STATIC external/glad/src/glad.c)
-target_include_directories(glad PUBLIC external/glad/include)
+# OpenSSL
+find_package(OpenSSL REQUIRED)
+if(NOT OpenSSL_FOUND)
+    message(FATAL_ERROR "OpenSSL not found")
+endif()
+message(STATUS "Found OpenSSL: ${OPENSSL_INCLUDE_DIR}")
+message(STATUS "    - OpenSSL Libraries: ${OPENSSL_LIBRARIES}")
 
-# Add NFD (Native File Dialog Extended)
-add_subdirectory(external/nativefiledialog-extended)
+set(OPENSSL_DLL_DIR "${OPENSSL_INCLUDE_DIR}/../bin")
+message(STATUS "    -OpenSSL DLL Directory: ${OPENSSL_DLL_DIR}")
 
-# Add ImGui source files
-set(IMGUI_DIR external/imgui)
+# GLAD
+add_library(glad STATIC ${EXTERNAL_DIR}/glad/src/glad.c)
+target_include_directories(glad PUBLIC ${EXTERNAL_DIR}/glad/include)
+
+# Native File Dialog Extended
+add_subdirectory(${EXTERNAL_DIR}/nativefiledialog-extended)
+
+# GoogleTest
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+# ==== ImGui Configuration ====
 set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui.cpp
     ${IMGUI_DIR}/imgui_demo.cpp
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp   # Changed to Win32 backend
+    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-# Create Kolosal static library
-add_library(kolosal_lib STATIC kolosal.cpp ${IMGUI_SOURCES})
+# ==== Font Definitions ====
+set(FONT_DEFINITIONS
+    IMGUI_FONT_PATH_INTER_REGULAR="fonts/Inter-Regular.ttf"
+    IMGUI_FONT_PATH_FIRACODE_REGULAR="fonts/FiraCode-Regular.ttf"
+    IMGUI_FONT_PATH_INTER_BOLD="fonts/Inter-Bold.ttf"
+    IMGUI_FONT_PATH_INTER_BOLDITALIC="fonts/Inter-BoldItalic.ttf"
+    IMGUI_FONT_PATH_INTER_ITALIC="fonts/Inter-Italic.ttf"
+    IMGUI_FONT_PATH_FA_BRANDS="fonts/fa-brands-400.otf"
+    IMGUI_FONT_PATH_FA_REGULAR="fonts/fa-regular-400.otf"
+    IMGUI_FONT_PATH_FA_SOLID="fonts/fa-solid-900.otf"
+)
 
-# Include directories for Kolosal library
+# ==== Kolosal Library ====
+add_library(kolosal_lib STATIC
+    source/win/kolosal.cpp 
+    ${IMGUI_SOURCES}
+)
+
+# Set definitions
+target_compile_definitions(kolosal_lib PUBLIC
+    CHAT_HISTORY_DIRECTORY="${CMAKE_SOURCE_DIR}/chat_history"
+    PRESETS_DIRECTORY="${CMAKE_SOURCE_DIR}/presets"
+)
+
 target_include_directories(kolosal_lib PUBLIC
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
     ${OpenGL_INCLUDE_DIR}
-    external/glad/include
-    external/icons
-    external/nlohmann
-    external/nativefiledialog-extended/src/include
-    external/stb
+    ${EXTERNAL_DIR}/glad/include
+    ${EXTERNAL_DIR}/icons
+    ${EXTERNAL_DIR}/nlohmann
+    ${EXTERNAL_DIR}/nativefiledialog-extended/src/include
+    ${EXTERNAL_DIR}/stb
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/assets
 )
 
-# Link libraries to Kolosal library
-if (WIN32)
+# Platform-specific library dependencies
+if(WIN32)
     target_link_libraries(kolosal_lib PUBLIC
         ${OpenGL_LIBRARIES}
         glad
@@ -57,128 +105,78 @@ if (WIN32)
         Dwmapi
         UxTheme
         Shcore
-        opengl32   # Ensure OpenGL library is linked
+        opengl32
         user32
         gdi32
         shell32
+        OpenSSL::SSL
+    )
+    
+    target_compile_definitions(kolosal_lib PUBLIC
+        IMGUI_IMPL_OPENGL_LOADER_GLAD
+        UNICODE
+        ${FONT_DEFINITIONS}
+        KOLOSAL_LOGO_PATH="assets/logo.png"
     )
 else()
     target_link_libraries(kolosal_lib PUBLIC
         ${OpenGL_LIBRARIES}
         glad
         nfd
+        OpenSSL::SSL
+    )
+    
+    target_compile_definitions(kolosal_lib PUBLIC
+        IMGUI_IMPL_OPENGL_LOADER_GLAD
+        ${FONT_DEFINITIONS}
+        KOLOSAL_LOGO_PATH="assets/logo.png"
     )
 endif()
 
-# Add compile definitions for ImGui and Windows
-if (WIN32)
-    target_compile_definitions(kolosal_lib PUBLIC
-        IMGUI_IMPL_OPENGL_LOADER_GLAD
-        UNICODE
-    )
-else()
-    target_compile_definitions(kolosal_lib PUBLIC
-        IMGUI_IMPL_OPENGL_LOADER_GLAD
-    )
-endif()
-
-# Define the font paths relative to the executable
-set(FONT_FILE_INTER_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Regular.ttf")
-set(FONT_FILE_FIRACODE_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/FiraCode-Regular.ttf")
-set(FONT_FILE_INTER_BOLD "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Bold.ttf")
-set(FONT_FILE_INTER_BOLDITALIC "${CMAKE_SOURCE_DIR}/external/fonts/Inter-BoldItalic.ttf")
-set(FONT_FILE_INTER_ITALIC "${CMAKE_SOURCE_DIR}/external/fonts/Inter-Italic.ttf")
-set(FONT_FILE_FA_BRANDS "${CMAKE_SOURCE_DIR}/external/fonts/fa-brands-400.otf")
-set(FONT_FILE_FA_REGULAR "${CMAKE_SOURCE_DIR}/external/fonts/fa-regular-400.otf")
-set(FONT_FILE_FA_SOLID "${CMAKE_SOURCE_DIR}/external/fonts/fa-solid-900.otf")
-
-# Add compile definitions for each font
-target_compile_definitions(kolosal_lib PUBLIC
-    IMGUI_FONT_PATH_INTER_REGULAR="Inter-Regular.ttf"
-    IMGUI_FONT_PATH_FIRACODE_REGULAR="FiraCode-Regular.ttf"
-    IMGUI_FONT_PATH_INTER_BOLD="Inter-Bold.ttf"
-    IMGUI_FONT_PATH_INTER_BOLDITALIC="Inter-BoldItalic.ttf"
-    IMGUI_FONT_PATH_INTER_ITALIC="Inter-Italic.ttf"
-    IMGUI_FONT_PATH_FA_BRANDS="fa-brands-400.otf"
-    IMGUI_FONT_PATH_FA_REGULAR="fa-regular-400.otf"
-    IMGUI_FONT_PATH_FA_SOLID="fa-solid-900.otf"
+# ==== Main Executable ====
+add_executable(KolosalDesktop WIN32 
+    source/main.cpp 
+    assets/resource.rc
 )
 
-# Create the main executable
-add_executable(KolosalDesktop WIN32 main.cpp resource.rc)
-
-# Include directories for the main executable
 target_include_directories(KolosalDesktop PRIVATE
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
     ${OpenGL_INCLUDE_DIR}
-    external/glad/include
-    external/icons
-    external/nlohmann
-    external/nativefiledialog-extended/src/include
-    # Removed external/glfw/include since GLFW is no longer used
+    ${EXTERNAL_DIR}/glad/include
+    ${EXTERNAL_DIR}/icons
+    ${EXTERNAL_DIR}/nlohmann
+    ${EXTERNAL_DIR}/nativefiledialog-extended/src/include
+    ${CMAKE_SOURCE_DIR}/include
 )
 
-# Link libraries to the main executable
-target_link_libraries(KolosalDesktop PRIVATE
-    kolosal_lib
-)
+target_link_libraries(KolosalDesktop PRIVATE kolosal_lib)
 
-# Add custom commands to copy the fonts to the build directory
+# ==== Post-Build Commands ====
+# Copy fonts
 add_custom_command(
     TARGET KolosalDesktop POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_INTER_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Regular.ttf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_FIRACODE_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/FiraCode-Regular.ttf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_INTER_BOLD}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Bold.ttf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_INTER_BOLDITALIC}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-BoldItalic.ttf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_INTER_ITALIC}" "$<TARGET_FILE_DIR:KolosalDesktop>/Inter-Italic.ttf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_FA_BRANDS}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-brands-400.otf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_FA_REGULAR}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-regular-400.otf"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${FONT_FILE_FA_SOLID}" "$<TARGET_FILE_DIR:KolosalDesktop>/fa-solid-900.otf"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${FONT_FOLDER_PATH}" "$<TARGET_FILE_DIR:KolosalDesktop>/fonts"
 )
 
-# Add custom command to copy the icons to the build directory
+# Copy assets
 add_custom_command(
     TARGET KolosalDesktop POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:KolosalDesktop>/assets"
+)
+
+# Copy OpenSSL DLLs
+add_custom_command(
+    TARGET KolosalDesktop POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_SOURCE_DIR}/icon.ico" "$<TARGET_FILE_DIR:KolosalDesktop>/icon.ico"
-
+        "${OPENSSL_DLL_DIR}/libcrypto-3-x64.dll"
+        "${OPENSSL_DLL_DIR}/libssl-3-x64.dll"
+        "$<TARGET_FILE_DIR:KolosalDesktop>/bin"
+    COMMENT "Copying OpenSSL DLLs to output directory"
 )
 
-target_compile_definitions(kolosal_lib PUBLIC
-    KOLOSAL_LOGO_PATH="assets/logo.png"
-)
-
-# Add openssl
-find_package(OpenSSL REQUIRED)
-if(NOT OpenSSL_FOUND)
-    message(FATAL_ERROR "OpenSSL not found")
-else()
-    message(STATUS "Found OpenSSL: ${OPENSSL_INCLUDE_DIR}")
-endif()
-
-target_link_libraries(kolosal_lib PUBLIC OpenSSL::SSL)
-
-# Add GoogleTest
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
-)
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-
+# ==== Testing ====
 enable_testing()
-
 add_subdirectory(tests)
