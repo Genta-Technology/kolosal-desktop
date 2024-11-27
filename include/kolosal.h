@@ -58,85 +58,11 @@
 using json = nlohmann::json;
 
 //-----------------------------------------------------------------------------
-// [SECTION] Structs and Enums
-//-----------------------------------------------------------------------------
-
-/**
- * @brief A struct to store the ImFont pointers for different markdown styles
- *
- * The MarkdownFonts struct stores the ImFont pointers for different markdown styles,
- * such as regular, bold, italic, bold italic, and code.
- */
-struct MarkdownFonts
-{
-    ImFont *regular = nullptr;
-    ImFont *bold = nullptr;
-    ImFont *italic = nullptr;
-    ImFont *boldItalic = nullptr;
-    ImFont *code = nullptr;
-};
-
-/**
- * @brief A struct to store the ImFont pointers for different icon fonts
- *
- * The IconFonts struct stores the ImFont pointers for different icon fonts,
- * such as regular and brands.
- */
-struct IconFonts
-{
-    ImFont *regular = nullptr;
-    ImFont *solid = nullptr;
-    ImFont *brands = nullptr;
-};
-
-/**
- * @brief A struct to store each model preset configuration.
- *
- * The ModelPreset struct stores the configuration for each model preset, including
- * the ID, last modified timestamp, name, system prompt, sampling settings, and generation settings.
- */
-struct ModelPreset
-{
-    int id;
-    int lastModified;
-
-    std::string name;
-    std::string systemPrompt;
-
-    // sampling
-    float temperature;
-    float top_p;
-    // TODO: Use int instead of float
-    // I use float right now because ImGui::SliderFloat requires a float
-    // so it needed to create a new custom slider for int
-    float top_k;
-    int random_seed;
-
-    // generation
-    // TODO: Use int instead of float
-    float max_new_tokens;
-    // TODO: Use int instead of float
-    float min_length;
-
-    ModelPreset(
-        const int id = 0,
-        const int lastModified = 0,
-        const std::string &name = "",
-        const std::string &systemPrompt = "",
-        float temperature = 0.7f,
-        float top_p = 0.9f,
-        float top_k = 50.0f,
-        int random_seed = 42,
-        float min_length = 0.0f,
-        float max_new_tokens = 2048.0f) : 
-        id(id), lastModified(lastModified), name(name), systemPrompt(systemPrompt), temperature(temperature),
-        top_p(top_p), top_k(top_k), random_seed(random_seed),
-        min_length(min_length), max_new_tokens(max_new_tokens) {}
-};
-
-//-----------------------------------------------------------------------------
 // [SECTION] Forward Declarations and Global Variables
 //-----------------------------------------------------------------------------
+
+// TODO: Refactor Window and OpenGL context to a class
+//       Add abstration for win32 to be able to handled for other platform (ie. linux use X11 or GLFW)
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -146,9 +72,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 extern std::unique_ptr<class BorderlessWindow> g_borderlessWindow;
 extern HGLRC                                   g_openglContext;
 extern HDC                                     g_deviceContext;
-
-// ImGui context
-extern std::unique_ptr<class PresetManager> g_presetManager;
 
 // textures
 extern GLuint      g_shaderProgram;
@@ -227,51 +150,6 @@ private:
 	HINSTANCE hInstance;		    ///< Handle to the instance.
 };
 
-/**
- * @brief A class to manage presets for the model settings
- *
- * The PresetManager class is responsible for loading, saving, and deleting model
- * presets. It also provides functionality to switch between presets and reset
- * the current preset to the default values.
- */
-class PresetManager
-{
-public:
-    explicit PresetManager(const std::string &presetsDirectory);
-
-    // Core functionality
-    auto loadPresets() -> bool;
-    auto savePreset(const ModelPreset &preset, bool createNewFile = false) -> bool;
-    auto savePresetToPath(const ModelPreset &preset, const std::string &filePath) -> bool;
-    auto deletePreset(const std::string &presetName) -> bool;
-    void switchPreset(int newIndex);
-    void resetCurrentPreset();
-
-    // Getters and setters
-    auto getPresets() const -> const std::vector<ModelPreset> & { return loadedPresets; }
-    auto getCurrentPreset() const -> const ModelPreset & { return loadedPresets[currentPresetIndex]; }
-    auto getCurrentPreset() -> ModelPreset & { return loadedPresets[currentPresetIndex]; }
-    auto getCurrentPresetIndex() const -> int { return currentPresetIndex; }
-    auto getDefaultPreset() const -> const ModelPreset & { return defaultPreset; }
-    auto hasUnsavedChanges() const -> bool;
-
-private:
-    std::string presetsPath;
-    std::vector<ModelPreset> loadedPresets;
-    std::vector<ModelPreset> originalPresets;
-    ModelPreset defaultPreset;
-    int currentPresetIndex;
-    bool hasInitialized = false;
-
-    // Helper methods
-    void createPresetsDirectoryIfNotExists();
-    void initializeDefaultPreset();
-    auto getDefaultPresets() const -> std::vector<ModelPreset>;
-    auto getPresetFilePath(const std::string &presetName) const -> std::string;
-    auto isValidPresetName(const std::string &name) const -> bool;
-    void saveDefaultPresets();
-};
-
 //-----------------------------------------------------------------------------
 // [SECTION] Function Prototypes
 //-----------------------------------------------------------------------------
@@ -299,27 +177,5 @@ void cleanup();
 //-----------------------------------------------------------------------------
 
 auto RGBAToImVec4(float r, float g, float b, float a) -> ImVec4;
-
-//-----------------------------------------------------------------------------
-// [SECTION] JSON Serialization and Deserialization Functions
-//-----------------------------------------------------------------------------
-
-// Model Preset Serialization and Deserialization
-void to_json(json &j, const ModelPreset &p);
-void from_json(const json &j, ModelPreset &p);
-
-//-----------------------------------------------------------------------------
-// [SECTION] Custom UI Functions
-//-----------------------------------------------------------------------------
-
-namespace ModelPresetSidebar
-{
-    void render(float &sidebarWidth);
-    void renderModelPresetsSelection(const float sidebarWidth);
-    void renderSamplingSettings(const float sidebarWidth);
-    void renderSaveAsDialog(bool &showSaveAsDialog);
-    void confirmSaveAsDialog(std::string &newPresetName);
-    void exportPresets();
-} // namespace ModelSettings
 
 #endif // KOLOSAL_H

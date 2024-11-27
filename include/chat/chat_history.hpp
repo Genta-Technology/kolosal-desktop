@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.hpp"
+
 #include <vector>
 #include <string>
 #include <chrono>
@@ -13,24 +15,6 @@ using json = nlohmann::json;
 
 namespace Chat
 {
-    auto timePointToString(const std::chrono::system_clock::time_point& tp) -> std::string
-    {
-        std::time_t time = std::chrono::system_clock::to_time_t(tp);
-        std::tm tm = *std::localtime(&time);
-        std::ostringstream oss;
-        oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
-        return oss.str();
-    }
-
-    auto stringToTimePoint(const std::string& str) -> std::chrono::system_clock::time_point
-    {
-        std::istringstream iss(str);
-        std::tm tm = {};
-        iss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
-        std::time_t time = std::mktime(&tm);
-        return std::chrono::system_clock::from_time_t(time);
-    }
-
     struct Message
     {
         int id;
@@ -58,7 +42,7 @@ namespace Chat
         }
     };
 
-    void to_json(json& j, const Message& msg)
+    inline void to_json(json& j, const Message& msg)
     {
         j = json{
             {"id", msg.id},
@@ -69,7 +53,7 @@ namespace Chat
             {"timestamp", timePointToString(msg.timestamp)} };
     }
 
-    void from_json(const json& j, Message& msg)
+    inline void from_json(const json& j, Message& msg)
     {
         msg.id = j.at("id").get<int>();
         msg.isLiked = j.at("isLiked").get<bool>();
@@ -99,7 +83,7 @@ namespace Chat
         }
     };
 
-    void to_json(json& j, const ChatHistory& chatHistory)
+    inline void to_json(json& j, const ChatHistory& chatHistory)
     {
         j = json{
             {"id", chatHistory.id},
@@ -108,7 +92,7 @@ namespace Chat
             {"messages", chatHistory.messages} };
     }
 
-    void from_json(const json& j, ChatHistory& chatHistory)
+    inline void from_json(const json& j, ChatHistory& chatHistory)
     {
         j.at("id").get_to(chatHistory.id);
         j.at("lastModified").get_to(chatHistory.lastModified);

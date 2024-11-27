@@ -14,16 +14,16 @@ public:
     void LoadFonts(ImGuiIO& imguiIO) 
     {
         // Load markdown fonts
-        mdFonts.regular    = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR, imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.bold       = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD, mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.italic     = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC, mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.boldItalic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, mdFonts.bold, Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.code       = LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, mdFonts.regular, Config::Font::DEFAULT_FONT_SIZE);
+        mdFonts.regular    = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR,    imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
+        mdFonts.bold       = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD,       mdFonts.regular,                 Config::Font::DEFAULT_FONT_SIZE);
+        mdFonts.italic     = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC,     mdFonts.regular,                 Config::Font::DEFAULT_FONT_SIZE);
+        mdFonts.boldItalic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, mdFonts.bold,                    Config::Font::DEFAULT_FONT_SIZE);
+        mdFonts.code       = LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, mdFonts.regular,                 Config::Font::DEFAULT_FONT_SIZE);
 
         // Load icon fonts
         iconFonts.regular = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_REGULAR, Config::Icon::DEFAULT_FONT_SIZE);
-        iconFonts.solid   = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_SOLID, Config::Icon::DEFAULT_FONT_SIZE);
-        iconFonts.brands  = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS, Config::Icon::DEFAULT_FONT_SIZE);
+        iconFonts.solid   = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_SOLID,   Config::Icon::DEFAULT_FONT_SIZE);
+        iconFonts.brands  = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS,  Config::Icon::DEFAULT_FONT_SIZE);
 
         // Set the default font
         imguiIO.FontDefault = mdFonts.regular;

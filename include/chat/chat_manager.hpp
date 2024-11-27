@@ -1,3 +1,5 @@
+// TODO: Implement the Observer pattern in the ChatManager class
+
 #pragma once
 
 #include "chat_persistence.hpp"
@@ -65,7 +67,8 @@ namespace Chat
         {
             std::unique_lock<std::shared_mutex> lock(m_mutex);
             auto it = m_chatNameToIndex.find(name);
-            if (it == m_chatNameToIndex.end()) {
+            if (it == m_chatNameToIndex.end()) 
+            {
                 return false;
             }
 
@@ -126,7 +129,8 @@ namespace Chat
         std::optional<ChatHistory> getCurrentChat() const
         {
             std::shared_lock<std::shared_mutex> lock(m_mutex);
-            if (!m_currentChatName || m_currentChatIndex >= m_chats.size()) {
+            if (!m_currentChatName || m_currentChatIndex >= m_chats.size()) 
+            {
                 return std::nullopt;
             }
             return m_chats[m_currentChatIndex];
@@ -135,7 +139,8 @@ namespace Chat
         void addMessageToCurrentChat(const Message& message)
         {
             std::unique_lock<std::shared_mutex> lock(m_mutex);
-            if (!m_currentChatName || m_currentChatIndex >= m_chats.size()) {
+            if (!m_currentChatName || m_currentChatIndex >= m_chats.size()) 
+            {
                 return;
             }
 
@@ -198,7 +203,8 @@ namespace Chat
                 std::unique_lock<std::shared_mutex> lock(m_mutex);
                 
                 auto it = m_chatNameToIndex.find(name);
-                if (it == m_chatNameToIndex.end()) {
+                if (it == m_chatNameToIndex.end()) 
+                {
                     return false;
                 }
 
@@ -214,11 +220,13 @@ namespace Chat
                 // Update indices
                 updateIndicesAfterDeletion(indexToRemove);
 
-                if (m_currentChatIndex == indexToRemove) {
+                if (m_currentChatIndex == indexToRemove) 
+                {
                     m_currentChatName = std::nullopt;
                     m_currentChatIndex = 0;
                 }
-                else if (m_currentChatIndex > indexToRemove) {
+                else if (m_currentChatIndex > indexToRemove) 
+                {
                     m_currentChatIndex--;
                 }
 
@@ -253,7 +261,8 @@ namespace Chat
             sortedChats.reserve(m_chats.size());
 
             // Use the sorted indices to return chats in order
-            for (const auto& idx : m_sortedIndices) {
+            for (const auto& idx : m_sortedIndices) 
+            {
                 sortedChats.push_back(m_chats[idx.index]);
             }
             return sortedChats;
@@ -293,8 +302,10 @@ namespace Chat
         {
             std::shared_lock<std::shared_mutex> lock(m_mutex);
             size_t sortedIndex = 0;
-            for (const auto& idx : m_sortedIndices) {
-                if (idx.name == name) {
+            for (const auto& idx : m_sortedIndices) 
+            {
+                if (idx.name == name) 
+                {
                     return sortedIndex;
                 }
                 sortedIndex++;
@@ -308,7 +319,8 @@ namespace Chat
             auto it = std::find_if(m_sortedIndices.begin(), m_sortedIndices.end(),
                 [timestamp](const ChatIndex& idx) { return idx.lastModified == timestamp; });
 
-            if (it != m_sortedIndices.end()) {
+            if (it != m_sortedIndices.end()) 
+            {
                 return m_chats[it->index];
             }
             return std::nullopt;
@@ -352,19 +364,24 @@ namespace Chat
         void updateIndicesAfterDeletion(size_t deletedIndex)
         {
             // Update chatNameToIndex
-            for (auto& [name, index] : m_chatNameToIndex) {
-                if (index > deletedIndex) {
+            for (auto& [name, index] : m_chatNameToIndex) 
+            {
+                if (index > deletedIndex) 
+                {
                     index--;
                 }
             }
 
             // Update sortedIndices
             std::set<ChatIndex> newSortedIndices;
-            for (const auto& idx : m_sortedIndices) {
-                if (idx.index > deletedIndex) {
+            for (const auto& idx : m_sortedIndices) 
+            {
+                if (idx.index > deletedIndex) 
+                {
                     newSortedIndices.insert({ idx.lastModified, idx.index - 1, idx.name });
                 }
-                else if (idx.index < deletedIndex) {
+                else if (idx.index < deletedIndex) 
+                {
                     newSortedIndices.insert(idx);
                 }
             }
@@ -389,7 +406,8 @@ namespace Chat
                 m_chatNameToIndex.clear();
                 m_sortedIndices.clear();
                 
-                for (size_t i = 0; i < m_chats.size(); ++i) {
+                for (size_t i = 0; i < m_chats.size(); ++i) 
+                {
                     m_chatNameToIndex[m_chats[i].name] = i;
                     m_sortedIndices.insert({
                         m_chats[i].lastModified,
@@ -399,10 +417,12 @@ namespace Chat
                 }
 
                 // Handle empty state or select most recent chat
-                if (m_chats.empty()) {
+                if (m_chats.empty()) 
+                {
                     createDefaultChat();
                 }
-                else if (!m_currentChatName) {
+                else if (!m_currentChatName) 
+                {
                     // Select the most recent chat (first in sorted indices)
                     auto mostRecent = m_sortedIndices.begin();
                     m_currentChatIndex = mostRecent->index;

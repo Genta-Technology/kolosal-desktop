@@ -1,3 +1,5 @@
+// TODO: refactor to use builder pattern
+
 #pragma once
 
 #include <string>
@@ -69,23 +71,23 @@ struct LabelConfig
  * size, input text buffer, placeholder text, flags, process input function, focus input field flag,
  * frame rounding, padding, background color, hover color, active color, and text color.
  */
-struct InputFieldConfig
+struct InputFieldConfig 
 {
     std::string id;
     ImVec2 size;
     std::string& inputTextBuffer;
     bool& focusInputField;
-    std::optional<std::string> placeholderText = "";
-    std::optional<ImGuiInputTextFlags> flags = ImGuiInputTextFlags_None;
-    std::optional<std::function<void(const std::string&)>> processInput;
-    std::optional<float> frameRounding = Config::InputField::FRAME_ROUNDING;
-    std::optional<ImVec2> padding = ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y);
-    std::optional<ImVec4> backgroundColor = Config::InputField::INPUT_FIELD_BG_COLOR;
-    std::optional<ImVec4> hoverColor = Config::InputField::INPUT_FIELD_BG_COLOR;
-    std::optional<ImVec4> activeColor = Config::InputField::INPUT_FIELD_BG_COLOR;
-    std::optional<ImVec4> textColor = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
+    std::string placeholderText = "";
+    ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
+    std::function<void(const std::string&)> processInput;
+    float frameRounding = Config::InputField::FRAME_ROUNDING;
+    ImVec2 padding = ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y);
+    ImVec4 backgroundColor = Config::InputField::INPUT_FIELD_BG_COLOR;
+    ImVec4 hoverColor = Config::InputField::INPUT_FIELD_BG_COLOR;
+    ImVec4 activeColor = Config::InputField::INPUT_FIELD_BG_COLOR;
+    ImVec4 textColor = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
 
-    // **Constructor**
+    // Constructor
     InputFieldConfig(
         const std::string& id,
         const ImVec2& size,
@@ -94,8 +96,7 @@ struct InputFieldConfig
         : id(id),
         size(size),
         inputTextBuffer(inputTextBuffer),
-        focusInputField(focusInputField) {
-    }
+        focusInputField(focusInputField) {}
 };
 
 namespace Label
@@ -421,14 +422,14 @@ namespace InputField
      */
     void setStyle(const InputFieldConfig& config)
     {
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, config.frameRounding.value());
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, config.padding.value());
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, config.backgroundColor.value());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, config.hoverColor.value());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, config.activeColor.value());
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, config.frameRounding);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, config.padding);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, config.backgroundColor);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, config.hoverColor);
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, config.activeColor);
 
         // Set text color
-        ImGui::PushStyleColor(ImGuiCol_Text, config.textColor.value());
+        ImGui::PushStyleColor(ImGuiCol_Text, config.textColor);
     }
 
     /**
@@ -492,11 +493,11 @@ namespace InputField
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + config.size.x - 15);
 
         // Draw the input field
-        if (ImGui::InputTextMultiline(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.size, config.flags.value()) && config.processInput.has_value())
+        if (ImGui::InputTextMultiline(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.size, config.flags) && config.processInput)
         {
-            InputField::handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput.value(),
-                (config.flags.value() & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
-                (config.flags.value() & ImGuiInputTextFlags_ShiftEnterForNewLine));
+            InputField::handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput,
+                (config.flags & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
+                (config.flags & ImGuiInputTextFlags_ShiftEnterForNewLine));
         }
 
         ImGui::PopTextWrapPos();
@@ -528,7 +529,7 @@ namespace InputField
                 ImGui::GetFontSize(),
                 placeholderPos,
                 placeholderColor,
-                config.placeholderText.value().c_str(),
+                config.placeholderText.c_str(),
                 nullptr,
                 wrapWidth);
         }
@@ -548,30 +549,46 @@ namespace InputField
      * @param processInput The function to process the input text.
      * @param focusInputField The flag to focus the input field.
      */
-    void render(const InputFieldConfig& config)
-    {
+    void render(const InputFieldConfig& config) {
         // Set style
         setStyle(config);
 
         // Set keyboard focus initially, then reset
-        if (config.focusInputField)
-        {
+        if (config.focusInputField) {
             ImGui::SetKeyboardFocusHere();
             config.focusInputField = false;
         }
 
-        // set size of input field
         ImGui::PushItemWidth(config.size.x);
 
-        // Draw the single-line input field
-        if (ImGui::InputText(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.flags.value()) && config.processInput.has_value())
-        {
-            handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput.value(), false);
+        // Prepare callback data
+        struct InputTextCallback_UserData {
+            std::string* Str;
+        };
+
+        InputTextCallback_UserData user_data;
+        user_data.Str = &config.inputTextBuffer;
+
+        auto callback = [](ImGuiInputTextCallbackData* data) -> int {
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+                InputTextCallback_UserData* user_data = (InputTextCallback_UserData*)data->UserData;
+                std::string* str = user_data->Str;
+                str->resize(data->BufTextLen);
+                data->Buf = (char*)str->c_str();
+            }
+            return 0;
+            };
+
+        ImGuiInputTextFlags flags = config.flags | ImGuiInputTextFlags_CallbackResize;
+
+        // Draw the input field
+        if (ImGui::InputText(config.id.c_str(), (char*)config.inputTextBuffer.c_str(), config.inputTextBuffer.capacity() + 1, flags, callback, &user_data)
+            && config.processInput) {
+            handleSubmission((char*)config.inputTextBuffer.c_str(), config.focusInputField, config.processInput, false);
         }
 
         // Draw placeholder if input is empty
-        if (strlen(config.inputTextBuffer.data()) == 0)
-        {
+        if (config.inputTextBuffer.empty()) {
             // Allow overlapping rendering
             ImGui::SetItemAllowOverlap();
 
@@ -589,7 +606,7 @@ namespace InputField
             ImU32 placeholderColor = ImGui::GetColorU32(ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
 
             // Render the placeholder text
-            drawList->AddText(placeholderPos, placeholderColor, config.placeholderText.value().c_str());
+            drawList->AddText(placeholderPos, placeholderColor, config.placeholderText.c_str());
         }
 
         // Restore original style

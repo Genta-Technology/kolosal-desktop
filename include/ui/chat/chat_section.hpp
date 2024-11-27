@@ -58,7 +58,7 @@ inline void renderTimestamp(const Chat::Message msg, float bubblePadding)
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() // Align timestamp at the bottom
         - (bubblePadding - Config::Timing::TIMESTAMP_OFFSET_Y));
     ImGui::SetCursorPosX(bubblePadding); // Align timestamp to the left
-    ImGui::TextWrapped("%s", Chat::timePointToString(msg.timestamp).c_str());
+    ImGui::TextWrapped("%s", timePointToString(msg.timestamp).c_str());
 
     ImGui::PopStyleColor(); // Restore original text color
 }
@@ -206,7 +206,7 @@ inline void renderRenameChatDialog(bool& showRenameChatDialog)
     ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
 
     // Apply rounded corners to the window
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
 
     if (ImGui::BeginPopupModal("Rename Chat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
