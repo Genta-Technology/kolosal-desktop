@@ -122,11 +122,8 @@ void InitializeGradientBackground(int display_w, int display_h)
     GradientBackground::setupFullScreenQuad();
 }
 
-void renderPlayground(Window& window, float chatHistorySidebarWidth, float modelPresetSidebarWidth)
+void renderPlayground(float chatHistorySidebarWidth, float modelPresetSidebarWidth)
 {
-    // Render title bar
-    titleBar(window.getNativeHandle());
-
     renderChatHistorySidebar(chatHistorySidebarWidth);
     renderModelPresetSidebar(modelPresetSidebarWidth);
     renderChatWindow(Config::INPUT_HEIGHT, chatHistorySidebarWidth, modelPresetSidebarWidth);
@@ -208,8 +205,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
             StartNewFrame();
 
+            // Render title bar
+            titleBar(window->getNativeHandle());
+
 			// Render the chat section
-            renderPlayground(*window, chatHistorySidebarWidth, modelPresetSidebarWidth);
+            renderPlayground(chatHistorySidebarWidth, modelPresetSidebarWidth);
 
             // Render the ImGui frame
             ImGui::Render();
