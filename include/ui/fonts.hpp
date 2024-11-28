@@ -1,5 +1,8 @@
 #pragma once
 
+#include "IconFontAwesome6.h"
+#include "IconFontAwesome6Brands.h"
+
 #include <iostream>
 #include <imgui.h>
 

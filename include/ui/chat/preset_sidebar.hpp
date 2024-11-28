@@ -4,6 +4,7 @@
 #include "model/preset_manager.hpp"
 #include "ui/widgets.hpp"
 #include "config.hpp"
+#include "nfd.h"
 
 /**
  * @brief Renders the model settings sidebar with the specified width.

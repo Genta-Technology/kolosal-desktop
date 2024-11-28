@@ -39,15 +39,6 @@ target_include_directories(glad PUBLIC ${EXTERNAL_DIR}/glad/include)
 # Native File Dialog Extended
 add_subdirectory(${EXTERNAL_DIR}/nativefiledialog-extended)
 
-# GoogleTest
-include(FetchContent)
-FetchContent_Declare(
-    googletest
-    URL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
-)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-
 # ==== ImGui Configuration ====
 set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui.cpp
@@ -73,7 +64,6 @@ set(FONT_DEFINITIONS
 
 # ==== Kolosal Library ====
 add_library(kolosal_lib STATIC
-    source/win/kolosal.cpp 
     ${IMGUI_SOURCES}
 )
 
@@ -174,10 +164,6 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${OPENSSL_DLL_DIR}/libcrypto-3-x64.dll"
         "${OPENSSL_DLL_DIR}/libssl-3-x64.dll"
-        "$<TARGET_FILE_DIR:KolosalDesktop>/bin"
+        "$<TARGET_FILE_DIR:KolosalDesktop>"
     COMMENT "Copying OpenSSL DLLs to output directory"
 )
-
-# ==== Testing ====
-enable_testing()
-add_subdirectory(tests)

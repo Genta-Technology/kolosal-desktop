@@ -5,8 +5,11 @@
 #include <string>
 #include <optional>
 #include <functional>
+#include <algorithm>
 #include <imgui.h>
+
 #include "config.hpp"
+#include "ui/fonts.hpp"
 
 enum ButtonState
 {

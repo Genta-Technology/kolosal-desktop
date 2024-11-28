@@ -4,8 +4,18 @@
 
 
 // TODO: Need to refactor this to use json file that is modifiable by the user in realtime
+//       Set up a system to save and load the settings from a json file
+//       The new json file should contain every detail of the settings of every widgets
 namespace Config
 {
+    constexpr int WINDOW_WIDTH = 1280;
+    constexpr int WINDOW_HEIGHT = 720;
+    constexpr float WINDOW_CORNER_RADIUS = 8.0f;
+    constexpr const char* WINDOW_TITLE = "Kolosal AI";
+    constexpr const char* OPENGL_VERSION = "#version 330";
+    constexpr float TRANSITION_DURATION = 0.3f; // Duration in seconds
+    constexpr double TARGET_FRAME_TIME = 1.0 / 60.0;
+
     // Global constants for padding
     constexpr float FRAME_PADDING_X = 10.0F;
     constexpr float FRAME_PADDING_Y = 10.0F;

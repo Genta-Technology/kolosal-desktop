@@ -1,30 +1,249 @@
-#include "kolosal.h"
+#include "config.hpp"
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) 
+#include "window/window_factory.hpp"
+#include "window/graphics_context_factory.hpp"
+#include "window/gradient_background.hpp"
+
+#include "ui/fonts.hpp"
+#include "ui/title_bar.hpp"
+#include "ui/chat/chat_history_sidebar.hpp"
+#include "ui/chat/chat_section.hpp"
+#include "ui/chat/preset_sidebar.hpp"
+
+#include "chat/chat_manager.hpp"
+#include "model/preset_manager.hpp"
+
+#include "nfd.h"
+
+#include <iostream>
+#include <chrono>
+#include <thread>
+#include <imgui.h>
+#include <imgui_impl_win32.h>
+#include <imgui_impl_opengl3.h>
+
+class ScopedCleanup
+{
+public:
+    ~ScopedCleanup()
+    {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
+
+        GradientBackground::CleanUp();
+
+        NFD_Quit();
+    }
+};
+
+class WindowStateTransitionManager
+{
+public:
+    WindowStateTransitionManager(Window& window)
+        : window(window)
+        , transitionProgress(0.0f)
+        , isTransitioning(false)
+        , targetActiveState(window.isActive())
+        , previousActiveState(window.isActive()) {
+    }
+
+    void updateTransition()
+    {
+        bool currentActiveState = window.isActive();
+        if (currentActiveState != previousActiveState)
+        {
+            isTransitioning = true;
+            targetActiveState = currentActiveState;
+            transitionStartTime = std::chrono::steady_clock::now();
+        }
+        previousActiveState = currentActiveState;
+
+        if (isTransitioning)
+        {
+            float elapsedTime = std::chrono::duration<float>(std::chrono::steady_clock::now() - transitionStartTime).count();
+            float progress = elapsedTime / Config::TRANSITION_DURATION;
+            if (progress >= 1.0f)
+            {
+                progress = 1.0f;
+                isTransitioning = false;
+            }
+            transitionProgress = targetActiveState ? progress : 1.0f - progress;
+        }
+        else
+        {
+            transitionProgress = targetActiveState ? 1.0f : 0.0f;
+        }
+
+        // Apply easing function
+        easedProgress = transitionProgress * transitionProgress * (3.0f - 2.0f * transitionProgress);
+    }
+
+    float getTransitionProgress() const { return transitionProgress; }
+    float getEasedProgress() const { return easedProgress; }
+
+private:
+    Window& window;
+    float transitionProgress;
+    float easedProgress;
+    bool isTransitioning;
+    bool targetActiveState;
+    std::chrono::steady_clock::time_point transitionStartTime;
+    bool previousActiveState;
+};
+
+void InitializeImGui(Window& window)
+{
+    // Setup ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& imguiIO = ImGui::GetIO();
+
+    // Enable power saving mode
+    imguiIO.ConfigFlags |= ImGuiConfigFlags_EnablePowerSavingMode;
+
+    // Set the rounding and border size for the window
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowRounding = Config::WINDOW_CORNER_RADIUS;
+    style.WindowBorderSize = 0.0f;               // Disable ImGui's window border
+    ImGui::StyleColorsDark();
+
+    // Initialize font manager
+    FontsManager::GetInstance().LoadFonts(imguiIO);
+
+    ImGui_ImplWin32_Init(window.getNativeHandle());
+    ImGui_ImplOpenGL3_Init("#version 330");
+}
+
+void InitializeGradientBackground(int display_w, int display_h)
+{
+    GradientBackground::generateGradientTexture(display_w, display_h);
+    g_shaderProgram = GradientBackground::createShaderProgram(g_quadVertexShaderSource, g_quadFragmentShaderSource);
+    GradientBackground::setupFullScreenQuad();
+}
+
+void renderPlayground(Window& window, float chatHistorySidebarWidth, float modelPresetSidebarWidth)
+{
+    // Render title bar
+    titleBar(window.getNativeHandle());
+
+    renderChatHistorySidebar(chatHistorySidebarWidth);
+    renderModelPresetSidebar(modelPresetSidebarWidth);
+    renderChatWindow(Config::INPUT_HEIGHT, chatHistorySidebarWidth, modelPresetSidebarWidth);
+}
+
+void StartNewFrame() {
+    // Start the ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplWin32_NewFrame();
+    ImGui::NewFrame();
+}
+
+void EnforceFrameRate(const std::chrono::time_point<std::chrono::high_resolution_clock>& frameStartTime)
+{
+    auto frameEndTime = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> frameDuration = frameEndTime - frameStartTime;
+    double frameTime = frameDuration.count();
+
+    if (frameTime < Config::TARGET_FRAME_TIME)
+    {
+        std::this_thread::sleep_for(std::chrono::duration<double>(Config::TARGET_FRAME_TIME - frameTime));
+    }
+}
+
+void HandleException(const std::exception& e)
+{
+    ::MessageBoxA(nullptr, e.what(), "Unhandled Exception", MB_OK | MB_ICONERROR);
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
     try 
     {
-        // Create the borderless window
-        g_borderlessWindow = std::make_unique<BorderlessWindow>(hInstance);
+        // Create the window
+        auto window = WindowFactory::createWindow();
+        window->createWindow(Config::WINDOW_WIDTH, Config::WINDOW_HEIGHT, Config::WINDOW_TITLE);
+        window->show();
 
-        // Initialize OpenGL
-        if (!initializeOpenGL(g_borderlessWindow->handle))
-            return 1;
+        // Create the OpenGL context
+        auto openglContext = GraphicContextFactory::createOpenGLContext();
+        openglContext->initialize(window->getNativeHandle());
 
-        // Setup ImGui context
-        setupImGui(g_borderlessWindow->handle);
+        // Initialize cleanup using RAII
+        ScopedCleanup cleanup;
+
+        // Initialize ImGui
+        InitializeImGui(*window);
+
+        // Initialize the chat manager and preset manager
+        Chat::initializeChatManager();
+        Model::initializePresetManager();
+
+        // Initialize NFD (Native File Dialog)
+        NFD_Init();
+
+        // Get initial window size
+        int display_w = window->getWidth();
+        int display_h = window->getHeight();
+
+        // Initialize gradient background
+        InitializeGradientBackground(display_w, display_h);
+
+        // Create window state transition manager
+        WindowStateTransitionManager transitionManager(*window);
+
+        // Initialize sidebar widths
+        float chatHistorySidebarWidth = Config::ChatHistorySidebar::SIDEBAR_WIDTH;
+        float modelPresetSidebarWidth = Config::ModelPresetSidebar::SIDEBAR_WIDTH;
 
         // Enter the main loop
-        mainLoop(g_borderlessWindow->handle);
+        while (!window->shouldClose()) 
+        {
+            auto frameStartTime = std::chrono::high_resolution_clock::now();
 
-        // Cleanup resources
-        cleanup();
+            window->processEvents();
+
+            // Update window state transition
+            transitionManager.updateTransition();
+
+            StartNewFrame();
+
+			// Render the chat section
+            renderPlayground(*window, chatHistorySidebarWidth, modelPresetSidebarWidth);
+
+            // Render the ImGui frame
+            ImGui::Render();
+
+            // Get updated window size
+            int new_display_w = window->getWidth();
+            int new_display_h = window->getHeight();
+
+            if (new_display_w != display_w || new_display_h != display_h) 
+            {
+                display_w = new_display_w;
+                display_h = new_display_h;
+                GradientBackground::generateGradientTexture(display_w, display_h);
+                glViewport(0, 0, display_w, display_h);
+            }
+
+            GradientBackground::renderGradientBackground(
+                display_w,
+                display_h,
+                transitionManager.getTransitionProgress(),
+                transitionManager.getEasedProgress()
+            );
+
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            openglContext->swapBuffers();
+
+            EnforceFrameRate(frameStartTime);
+        }
 
         return 0;
     }
-    catch (const std::exception& e) 
-    {
-        ::MessageBoxA(nullptr, e.what(), "Unhandled Exception", MB_OK | MB_ICONERROR);
+    catch (const std::exception& e) {
+        HandleException(e);
         return 1;
     }
 }
