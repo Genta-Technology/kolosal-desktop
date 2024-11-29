@@ -52,7 +52,7 @@ public:
     static std::string getUniqueDeviceIdentifier()
     {
 #ifdef _WIN32
-		// Windows-specific code to get the GUID of the machine
+		    // Windows-specific code to get the GUID of the machine
         HKEY hKey;
         if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) != ERROR_SUCCESS)
         {
