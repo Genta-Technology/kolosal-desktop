@@ -2,8 +2,6 @@
 
 #ifdef _WIN32
 #include <Windows.h>
-#include <iphlpapi.h>
-#pragma comment(lib, "IPHLPAPI.lib")
 #else
 #include <unistd.h>
 #include <ifaddrs.h>
@@ -21,6 +19,9 @@
 #include <vector>
 #include <array>
 #include <string>
+
+// TODO: use password-based key derivation function (PBKDF2) to generate key from password
+//       to be more secure.
 
 class Crypto
 {
@@ -51,23 +52,23 @@ public:
     static std::string getUniqueDeviceIdentifier()
     {
 #ifdef _WIN32
-        // Windows-specific code to get the MAC address
-        IP_ADAPTER_INFO AdapterInfo[16]; // Allocate information for up to 16 NICs
-        DWORD dwBufLen = sizeof(AdapterInfo); // Save memory size of buffer
-
-        DWORD dwStatus = GetAdaptersInfo(AdapterInfo, &dwBufLen);
-        if (dwStatus != ERROR_SUCCESS)
-            throw std::runtime_error("Failed to get MAC address");
-
-        PIP_ADAPTER_INFO pAdapterInfo = AdapterInfo; // Contains pointer to current adapter info
-        std::string macAddress = "";
-
-        while (pAdapterInfo)
+		// Windows-specific code to get the GUID of the machine
+        HKEY hKey;
+        if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) != ERROR_SUCCESS)
         {
-            macAddress += pAdapterInfo->Address[0];
-            pAdapterInfo = pAdapterInfo->Next;
+            throw std::runtime_error("Failed to open registry key");
         }
-        return macAddress;
+
+        char value[256];
+        DWORD size = sizeof(value);
+        if (RegQueryValueExA(hKey, "MachineGuid", nullptr, nullptr, (LPBYTE)value, &size) != ERROR_SUCCESS)
+        {
+            RegCloseKey(hKey);
+            throw std::runtime_error("Failed to read MachineGuid");
+        }
+        RegCloseKey(hKey);
+
+        return std::string(value, size - 1); // Exclude the null terminator
 #else
         // Linux/Unix-specific code to get the MAC address
         struct ifaddrs* ifaddr, * ifa;
