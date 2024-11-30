@@ -8,13 +8,13 @@
 
 class WindowFactory {
 public:
-    static std::unique_ptr<Window> createWindow()
-    {
+	static std::unique_ptr<Window> createWindow()
+	{
 #ifdef _WIN32
-        HINSTANCE hInstance = GetModuleHandle(NULL);
-        return std::make_unique<Win32Window>(hInstance);
+		HINSTANCE hInstance = GetModuleHandle(NULL);
+		return std::make_unique<Win32Window>(hInstance);
 #else
 		// TODO: Implement for other platforms
 #endif
-    }
+	}
 };
