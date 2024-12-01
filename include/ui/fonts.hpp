@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IconsMaterialSymbols.h"
+#include "IconsCodicons.h"
 
 #include <iostream>
 #include <imgui.h>
@@ -27,7 +27,7 @@ public:
 
     enum IconType
     {
-        OUTLINED
+        CODICON
     };
 
     enum SizeLevel
@@ -55,14 +55,14 @@ public:
         }
     }
 
-    ImFont* GetIconFont(const IconType style, SizeLevel sizeLevel = MD) const
+    ImFont* GetIconFont(const IconType style = CODICON, SizeLevel sizeLevel = MD) const
     {
         // Clamp the size level to the available range
         sizeLevel = std::clamp(sizeLevel, SizeLevel::SM, SizeLevel::XL);
 
         switch (style)
         {
-        case OUTLINED: return iconFonts.outlined[sizeLevel];
+        case CODICON: return iconFonts.codicon[sizeLevel];
         default: return nullptr;
         }
     }
@@ -109,7 +109,7 @@ private:
     } mdFonts;
 
     struct IconFonts {
-        ImFont* outlined[SizeLevel::SIZE_COUNT]{};
+        ImFont* codicon[SizeLevel::SIZE_COUNT]{};
     } iconFonts;
 
     // Private methods for loading fonts
@@ -136,12 +136,12 @@ private:
 
     void LoadIconFonts(ImGuiIO& imguiIO, const std::array<float, SizeLevel::SIZE_COUNT>& fontSizes)
     {
-        const char* iconFontPath = IMGUI_FONT_PATH_OUTLINED;
+        const char* iconFontPath = IMGUI_FONT_PATH_CODICON;
 
         for (int8_t i = SizeLevel::SM; i <= SizeLevel::XL; ++i)
         {
             float size = fontSizes[i];
-            iconFonts.outlined[i] = LoadIconFont(imguiIO, iconFontPath, size);
+            iconFonts.codicon[i] = LoadIconFont(imguiIO, iconFontPath, size);
         }
     }
 
@@ -158,7 +158,7 @@ private:
 
     ImFont* LoadIconFont(ImGuiIO& imguiIO, const char* iconFontPath, float fontSize)
     {
-        static const ImWchar icons_ranges[] = { ICON_MIN_MS, ICON_MAX_MS, 0 };
+        static const ImWchar icons_ranges[] = { ICON_MIN_CI, ICON_MAX_CI, 0 };
         ImFontConfig icons_config;
         icons_config.MergeMode = false;
         icons_config.PixelSnapH = true;

@@ -37,10 +37,23 @@ public:
 
         // Hash the unique identifier to generate a key
         unsigned char hash[SHA256_DIGEST_LENGTH];
-        SHA256_CTX sha256;
-        SHA256_Init(&sha256);
-        SHA256_Update(&sha256, deviceId.c_str(), deviceId.size());
-        SHA256_Final(hash, &sha256);
+        EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+        if (mdctx == nullptr) {
+            throw std::runtime_error("Failed to create EVP_MD_CTX");
+        }
+        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr) != 1) {
+            EVP_MD_CTX_free(mdctx);
+            throw std::runtime_error("Failed to initialize digest");
+        }
+        if (EVP_DigestUpdate(mdctx, deviceId.c_str(), deviceId.size()) != 1) {
+            EVP_MD_CTX_free(mdctx);
+            throw std::runtime_error("Failed to update digest");
+        }
+        if (EVP_DigestFinal_ex(mdctx, hash, nullptr) != 1) {
+            EVP_MD_CTX_free(mdctx);
+            throw std::runtime_error("Failed to finalize digest");
+        }
+        EVP_MD_CTX_free(mdctx);
 
         // Copy the first KEY_SIZE bytes into the key array
         std::array<uint8_t, KEY_SIZE> key;
@@ -128,7 +141,7 @@ public:
             int len = 0, ciphertext_len = 0;
 
             if (EVP_EncryptUpdate(ctx, ciphertext.data(), &len,
-                plaintext.data(), plaintext.size()) != 1)
+                plaintext.data(), static_cast<int>(plaintext.size())) != 1)
             {
                 throw std::runtime_error("Failed to encrypt data");
             }
@@ -195,7 +208,7 @@ public:
             int len = 0, plaintext_len = 0;
 
             if (EVP_DecryptUpdate(ctx, plaintext.data(), &len,
-                ciphertext.data(), ciphertext.size()) != 1)
+                ciphertext.data(), static_cast<int>(ciphertext.size())) != 1)
             {
                 throw std::runtime_error("Failed to decrypt data");
             }

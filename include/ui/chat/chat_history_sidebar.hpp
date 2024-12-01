@@ -19,7 +19,7 @@ inline void renderChatHistoryList(ImVec2 contentArea)
         ButtonConfig chatButtonConfig;
         chatButtonConfig.id = "##chat" + std::to_string(chat.id);
         chatButtonConfig.label = chat.name;
-        chatButtonConfig.icon = ICON_MS_CHAT_BUBBLE;
+        chatButtonConfig.icon = ICON_CI_COMMENT;
         chatButtonConfig.size = ImVec2(contentArea.x - 20, 0);
         chatButtonConfig.gap = 10.0F;
         chatButtonConfig.onClick = [chatName = chat.name]() {
@@ -89,7 +89,7 @@ inline void renderChatHistorySidebar(float& sidebarWidth)
 
     ButtonConfig createNewChatButtonConfig;
     createNewChatButtonConfig.id = "##createNewChat";
-    createNewChatButtonConfig.icon = ICON_MS_EDIT_SQUARE;
+    createNewChatButtonConfig.icon = ICON_CI_ADD;
     createNewChatButtonConfig.size = ImVec2(buttonHeight, 24);
     createNewChatButtonConfig.onClick = []() {
         Chat::ChatManager::getInstance().createNewChat(

@@ -40,7 +40,7 @@ struct ButtonConfig
     std::optional<float> gap = 5.0F;
     std::function<void()> onClick;
     std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
-    std::optional<FontsManager::IconType> iconType = FontsManager::OUTLINED;
+    std::optional<FontsManager::IconType> iconType = FontsManager::CODICON;
     std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT_COL;
     std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
@@ -64,7 +64,7 @@ struct LabelConfig
     std::optional<float> iconPaddingY = 5.0F;
     std::optional<float> gap = 5.0F;
 	std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
-    std::optional<FontsManager::IconType> iconType = FontsManager::OUTLINED;
+    std::optional<FontsManager::IconType> iconType = FontsManager::CODICON;
     std::optional<Alignment> alignment = Alignment::CENTER;
 };
 
@@ -190,13 +190,13 @@ namespace Label
                 float targetWidth = availableLabelWidth - ellipsisWidth;
 
                 // Binary search to find the right truncation point
-                int left = 0;
-                int right = config.label.length();
+                size_t left = 0;
+                size_t right = config.label.length();
                 truncatedLabel = config.label;
 
                 while (left < right)
                 {
-                    int mid = (left + right + 1) / 2;
+                    size_t mid = (left + right + 1) / 2;
                     std::string testStr = config.label.substr(0, mid);
                     float testWidth = ImGui::CalcTextSize(testStr.c_str()).x;
 
@@ -333,7 +333,7 @@ namespace Button
         labelConfig.icon = config.icon.value_or("");
         labelConfig.size = config.size;
         labelConfig.fontType = config.fontType.value_or(FontsManager::REGULAR);
-        labelConfig.iconType = config.iconType.value_or(FontsManager::OUTLINED);
+        labelConfig.iconType = config.iconType.value_or(FontsManager::CODICON);
         labelConfig.gap = config.gap.value_or(5.0f);
         labelConfig.alignment = config.alignment.value_or(Alignment::CENTER);
 

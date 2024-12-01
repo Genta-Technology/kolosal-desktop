@@ -73,7 +73,7 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
         ButtonConfig copyButtonConfig;
         copyButtonConfig.id = "##copy" + std::to_string(index);
         copyButtonConfig.label = std::nullopt;
-        copyButtonConfig.icon = ICON_MS_CONTENT_COPY;
+        copyButtonConfig.icon = ICON_CI_COPY;
         copyButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
         copyButtonConfig.onClick = [&msg]()
             {
@@ -92,7 +92,7 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
         ButtonConfig likeButtonConfig;
         likeButtonConfig.id = "##like" + std::to_string(index);
         likeButtonConfig.label = std::nullopt;
-        likeButtonConfig.icon = ICON_MS_THUMB_UP;
+        likeButtonConfig.icon = ICON_CI_THUMBSUP;
         likeButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
         likeButtonConfig.onClick = [index]()
             {
@@ -102,7 +102,7 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
         ButtonConfig dislikeButtonConfig;
         dislikeButtonConfig.id = "##dislike" + std::to_string(index);
         dislikeButtonConfig.label = std::nullopt;
-        dislikeButtonConfig.icon = ICON_MS_THUMB_DOWN;
+        dislikeButtonConfig.icon = ICON_CI_THUMBSDOWN;
         dislikeButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
         dislikeButtonConfig.onClick = [index]()
             {
@@ -534,7 +534,7 @@ inline void renderChatWindow(float inputHeight, float leftSidebarWidth, float ri
             showRenameChatDialog = true;
         };
     renameButtonConfig.alignment = Alignment::CENTER;
-    renameButtonConfig.hoverColor = ImVec4(0.1, 0.1, 0.1, 0.5);
+    renameButtonConfig.hoverColor = ImVec4(0.1F, 0.1F, 0.1F, 0.5F);
     Button::render(renameButtonConfig);
 
     // Render the rename chat dialog

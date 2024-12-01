@@ -19,7 +19,7 @@ void renderSamplingSettings(const float sidebarWidth)
     LabelConfig labelConfig;
     labelConfig.id = "##systempromptlabel";
     labelConfig.label = "System Prompt";
-    labelConfig.icon = ICON_MS_SETTINGS;
+    labelConfig.icon = ICON_CI_GEAR;
     labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
     labelConfig.fontType = FontsManager::BOLD;
     Label::render(labelConfig);
@@ -61,7 +61,7 @@ void renderSamplingSettings(const float sidebarWidth)
     LabelConfig modelSettingsLabelConfig;
     modelSettingsLabelConfig.id = "##modelsettings";
     modelSettingsLabelConfig.label = "Model Settings";
-    modelSettingsLabelConfig.icon = ICON_MS_TUNE;
+    modelSettingsLabelConfig.icon = ICON_CI_SETTINGS;
     modelSettingsLabelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
 	modelSettingsLabelConfig.fontType = FontsManager::BOLD;
     Label::render(modelSettingsLabelConfig);
@@ -223,7 +223,7 @@ void renderModelPresetsSelection(const float sidebarWidth)
         LabelConfig labelConfig;
         labelConfig.id = "##modelpresets";
         labelConfig.label = "Model Presets";
-        labelConfig.icon = ICON_MS_WIDGETS;
+        labelConfig.icon = ICON_CI_PACKAGE;
         labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
 		labelConfig.fontType = FontsManager::BOLD;
         Label::render(labelConfig);
@@ -270,7 +270,7 @@ void renderModelPresetsSelection(const float sidebarWidth)
         ButtonConfig deleteButtonConfig;
         deleteButtonConfig.id = "##delete";
         deleteButtonConfig.label = std::nullopt;
-        deleteButtonConfig.icon = ICON_MS_DELETE;
+        deleteButtonConfig.icon = ICON_CI_TRASH;
         deleteButtonConfig.size = ImVec2(24, 0);
         deleteButtonConfig.onClick = [&]()
             {
