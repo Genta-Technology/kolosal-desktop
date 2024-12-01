@@ -6,6 +6,13 @@
 #include <iostream>
 #include <imgui.h>
 
+// TODO: switch to use Material Design icons
+//       - https://fonts.google.com/icons
+//       - https://github.com/juliettef/IconFontCppHeaders/blob/main/IconsMaterialDesign.h
+//       - https://github.com/juliettef/IconFontCppHeaders/blob/main/IconsMaterialSymbols.h
+
+// TODO: manage the fonts sizes: 12, 18, 24, 36, 48, 60, 72
+
 class FontsManager {
 public:
 	static FontsManager& GetInstance()
