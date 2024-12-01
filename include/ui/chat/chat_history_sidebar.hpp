@@ -19,7 +19,7 @@ inline void renderChatHistoryList(ImVec2 contentArea)
         ButtonConfig chatButtonConfig;
         chatButtonConfig.id = "##chat" + std::to_string(chat.id);
         chatButtonConfig.label = chat.name;
-        chatButtonConfig.icon = ICON_FA_COMMENT;
+        chatButtonConfig.icon = ICON_MS_CHAT_BUBBLE;
         chatButtonConfig.size = ImVec2(contentArea.x - 20, 0);
         chatButtonConfig.gap = 10.0F;
         chatButtonConfig.onClick = [chatName = chat.name]() {
@@ -74,7 +74,7 @@ inline void renderChatHistorySidebar(float& sidebarWidth)
     labelConfig.label = "Recents";
     labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
     labelConfig.iconPaddingX = 10.0F;
-    labelConfig.isBold = true;
+	labelConfig.fontType = FontsManager::BOLD;
     Label::render(labelConfig);
 
     // Calculate label height
@@ -89,7 +89,7 @@ inline void renderChatHistorySidebar(float& sidebarWidth)
 
     ButtonConfig createNewChatButtonConfig;
     createNewChatButtonConfig.id = "##createNewChat";
-    createNewChatButtonConfig.icon = ICON_FA_PEN_TO_SQUARE;
+    createNewChatButtonConfig.icon = ICON_MS_EDIT_SQUARE;
     createNewChatButtonConfig.size = ImVec2(buttonHeight, 24);
     createNewChatButtonConfig.onClick = []() {
         Chat::ChatManager::getInstance().createNewChat(

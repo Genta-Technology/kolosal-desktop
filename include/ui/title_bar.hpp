@@ -115,14 +115,19 @@ void titleBar(void* handler)
 
             // Render minimize icon
             {
-                ImVec2 iconPos = ImGui::GetItemRectMin();
-                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).x) / 2.0f) - 2.5;
-                iconPos.y += ((buttonHeight - ImGui::CalcTextSize(ICON_FA_WINDOW_MINIMIZE).y) / 2.0f) - 5;
+                ImVec2 p_min = ImGui::GetItemRectMin();
+                ImVec2 p_max = ImGui::GetItemRectMax();
+                float padding = 18.0F;
+                ImU32 symbol_color = IM_COL32(255, 255, 255, 255);
+                float thickness = 1.0f;
+				float y = (p_max.y - p_min.y) / 2;
 
-                // Select icon font
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
-                draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), ICON_FA_WINDOW_MINIMIZE);
-                ImGui::PopFont();
+                draw_list->AddLine(
+                    ImVec2(p_min.x + padding - 2, y),
+                    ImVec2(p_max.x - padding + 2, y),
+                    symbol_color,
+                    thickness
+                );
             }
 
             ImGui::PopID();
@@ -155,13 +160,13 @@ void titleBar(void* handler)
 
             // Render maximize or restore icon
             {
-                const char* icon = IsZoomed(hwnd) ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE;
+                const char* icon = IsZoomed(hwnd) ? ICON_MS_SELECT_WINDOW_2 : ICON_MS_CROP_SQUARE;
                 ImVec2 iconPos = ImGui::GetItemRectMin();
-                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 2.5;
+                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 3;
                 iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
 
                 // Select icon font
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
+                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::OUTLINED));
                 draw_list->AddText(iconPos, IM_COL32(255, 255, 255, 255), icon);
                 ImGui::PopFont();
             }

@@ -19,9 +19,9 @@ void renderSamplingSettings(const float sidebarWidth)
     LabelConfig labelConfig;
     labelConfig.id = "##systempromptlabel";
     labelConfig.label = "System Prompt";
-    labelConfig.icon = ICON_FA_GEAR;
+    labelConfig.icon = ICON_MS_SETTINGS;
     labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
-    labelConfig.isBold = true;
+    labelConfig.fontType = FontsManager::BOLD;
     Label::render(labelConfig);
 
     ImGui::Spacing();
@@ -61,9 +61,9 @@ void renderSamplingSettings(const float sidebarWidth)
     LabelConfig modelSettingsLabelConfig;
     modelSettingsLabelConfig.id = "##modelsettings";
     modelSettingsLabelConfig.label = "Model Settings";
-    modelSettingsLabelConfig.icon = ICON_FA_SLIDERS;
+    modelSettingsLabelConfig.icon = ICON_MS_TUNE;
     modelSettingsLabelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
-    modelSettingsLabelConfig.isBold = true;
+	modelSettingsLabelConfig.fontType = FontsManager::BOLD;
     Label::render(modelSettingsLabelConfig);
 
     ImGui::Spacing();
@@ -177,7 +177,6 @@ void renderSaveAsDialog(bool& showSaveAsDialog)
                 newPresetName.clear();
             }
             };
-        confirmSaveConfig.iconSolid = false;
         confirmSaveConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
         confirmSaveConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
         confirmSaveConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
@@ -192,7 +191,6 @@ void renderSaveAsDialog(bool& showSaveAsDialog)
                 ImGui::CloseCurrentPopup();
                 newPresetName.clear();
             };
-        cancelSaveConfig.iconSolid = false;
         cancelSaveConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
         cancelSaveConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
         cancelSaveConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
@@ -225,9 +223,9 @@ void renderModelPresetsSelection(const float sidebarWidth)
         LabelConfig labelConfig;
         labelConfig.id = "##modelpresets";
         labelConfig.label = "Model Presets";
-        labelConfig.icon = ICON_FA_BOX_OPEN;
+        labelConfig.icon = ICON_MS_WIDGETS;
         labelConfig.size = ImVec2(Config::Icon::DEFAULT_FONT_SIZE, 0);
-        labelConfig.isBold = true;
+		labelConfig.fontType = FontsManager::BOLD;
         Label::render(labelConfig);
     }
 
@@ -272,7 +270,7 @@ void renderModelPresetsSelection(const float sidebarWidth)
         ButtonConfig deleteButtonConfig;
         deleteButtonConfig.id = "##delete";
         deleteButtonConfig.label = std::nullopt;
-        deleteButtonConfig.icon = ICON_FA_TRASH;
+        deleteButtonConfig.icon = ICON_MS_DELETE;
         deleteButtonConfig.size = ImVec2(24, 0);
         deleteButtonConfig.onClick = [&]()
             {
@@ -296,7 +294,6 @@ void renderModelPresetsSelection(const float sidebarWidth)
                     }
                 }
             };
-        deleteButtonConfig.iconSolid = true;
         deleteButtonConfig.backgroundColor = Config::Color::TRANSPARENT_COL;
         deleteButtonConfig.hoverColor = RGBAToImVec4(191, 88, 86, 255);
         deleteButtonConfig.activeColor = RGBAToImVec4(165, 29, 45, 255);
@@ -339,7 +336,6 @@ void renderModelPresetsSelection(const float sidebarWidth)
                     }
                 }
             };
-        saveButtonConfig.iconSolid = false;
         saveButtonConfig.backgroundColor = Model::PresetManager::getInstance().hasUnsavedChanges() ? RGBAToImVec4(26, 95, 180, 255) : RGBAToImVec4(26, 95, 180, 128);
         saveButtonConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
         saveButtonConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
@@ -467,7 +463,6 @@ void renderModelPresetSidebar(float& sidebarWidth)
         {
             exportPresets();
         };
-    exportButtonConfig.iconSolid = false;
     exportButtonConfig.backgroundColor = Config::Color::SECONDARY;
     exportButtonConfig.hoverColor = Config::Color::PRIMARY;
     exportButtonConfig.activeColor = Config::Color::SECONDARY;

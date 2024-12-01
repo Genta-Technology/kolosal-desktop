@@ -1,100 +1,154 @@
 #pragma once
 
-#include "IconFontAwesome6.h"
-#include "IconFontAwesome6Brands.h"
+#include "IconsMaterialSymbols.h"
 
 #include <iostream>
 #include <imgui.h>
+#include <array>
+#include <algorithm>
 
-class FontsManager {
+class FontsManager
+{
 public:
-    static FontsManager& GetInstance() 
+    static FontsManager& GetInstance()
     {
         static FontsManager instance;
         return instance;
     }
 
-    void LoadFonts(ImGuiIO& imguiIO) 
+    enum FontType
     {
-        // Load markdown fonts
-        mdFonts.regular    = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR,    imguiIO.Fonts->AddFontDefault(), Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.bold       = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLD,       mdFonts.regular,                 Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.italic     = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_ITALIC,     mdFonts.regular,                 Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.boldItalic = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_BOLDITALIC, mdFonts.bold,                    Config::Font::DEFAULT_FONT_SIZE);
-        mdFonts.code       = LoadFont(imguiIO, IMGUI_FONT_PATH_FIRACODE_REGULAR, mdFonts.regular,                 Config::Font::DEFAULT_FONT_SIZE);
+        REGULAR,
+        BOLD,
+        ITALIC,
+        BOLDITALIC,
+        CODE
+    };
 
-        // Load icon fonts
-        iconFonts.regular = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_REGULAR, Config::Icon::DEFAULT_FONT_SIZE);
-        iconFonts.solid   = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_SOLID,   Config::Icon::DEFAULT_FONT_SIZE);
-        iconFonts.brands  = LoadIconFont(imguiIO, IMGUI_FONT_PATH_FA_BRANDS,  Config::Icon::DEFAULT_FONT_SIZE);
+    enum IconType
+    {
+        OUTLINED
+    };
 
-        // Set the default font
-        imguiIO.FontDefault = mdFonts.regular;
+    enum SizeLevel
+    {
+        SM = 0,    // Small
+        MD,        // Medium
+        LG,        // Large
+        XL,        // Extra Large
+        SIZE_COUNT
+    };
+
+    ImFont* GetMarkdownFont(const FontType style, SizeLevel sizeLevel = MD) const
+    {
+        // Clamp the size level to the available range
+        sizeLevel = std::clamp(sizeLevel, SizeLevel::SM, SizeLevel::XL);
+
+        switch (style)
+        {
+        case REGULAR: return mdFonts.regular[sizeLevel];
+        case BOLD: return mdFonts.bold[sizeLevel];
+        case ITALIC: return mdFonts.italic[sizeLevel];
+        case BOLDITALIC: return mdFonts.boldItalic[sizeLevel];
+        case CODE: return mdFonts.code[sizeLevel];
+        default: return nullptr;
+        }
     }
 
-	enum FontType 
+    ImFont* GetIconFont(const IconType style, SizeLevel sizeLevel = MD) const
     {
-		REGULAR,
-		BOLD,
-		ITALIC,
-		BOLDITALIC,
-		CODE,
-		SOLID,      // Icon font
-		BRANDS	    // Icon font
-	};
+        // Clamp the size level to the available range
+        sizeLevel = std::clamp(sizeLevel, SizeLevel::SM, SizeLevel::XL);
 
-    ImFont* GetMarkdownFont(const FontType style) const
-    {
-		switch (style)
-		{
-        case FontType::REGULAR    : return mdFonts.regular;
-        case FontType::BOLD       : return mdFonts.bold;
-        case FontType::ITALIC     : return mdFonts.italic;
-        case FontType::BOLDITALIC : return mdFonts.boldItalic;
-        case FontType::CODE       : return mdFonts.code;
-		default                   : return nullptr;
-		}
-    }
-
-    ImFont* GetIconFont(const FontType style) const
-    {
-		switch (style)
-		{
-        case FontType::REGULAR : return iconFonts.regular;
-        case FontType::SOLID   : return iconFonts.solid;
-        case FontType::BRANDS  : return iconFonts.brands;
-		default                : return nullptr;
-		}
+        switch (style)
+        {
+        case OUTLINED: return iconFonts.outlined[sizeLevel];
+        default: return nullptr;
+        }
     }
 
 private:
-    // Private constructor to prevent instantiation
-    FontsManager() = default;
+    // Private constructor that now handles initialization
+    FontsManager()
+    {
+        // Get ImGui IO
+        ImGuiIO& imguiIO = ImGui::GetIO();
+
+        // Font sizes mapping based on SizeLevel enum
+        static const std::array<float, SizeLevel::SIZE_COUNT> fontSizes = {
+            12.0f, // SM
+            18.0f, // MD
+            24.0f, // LG
+            36.0f, // XL
+        };
+
+        // Preload default font once
+        ImFont* defaultFont = imguiIO.Fonts->AddFontDefault();
+
+        // Load markdown fonts
+        LoadMarkdownFonts(imguiIO, defaultFont, fontSizes);
+
+        // Load icon fonts
+        LoadIconFonts(imguiIO, fontSizes);
+
+        // Set the default font
+        imguiIO.FontDefault = mdFonts.regular[SizeLevel::MD];
+    }
 
     // Delete copy constructor and assignment operator
     FontsManager(const FontsManager&) = delete;
     FontsManager& operator=(const FontsManager&) = delete;
 
-    // MarkdownFonts and IconFonts members
+    // Rest of the private members and methods remain the same
     struct MarkdownFonts {
-        ImFont* regular = nullptr;
-        ImFont* bold = nullptr;
-        ImFont* italic = nullptr;
-        ImFont* boldItalic = nullptr;
-        ImFont* code = nullptr;
+        ImFont* regular[SizeLevel::SIZE_COUNT]{};
+        ImFont* bold[SizeLevel::SIZE_COUNT]{};
+        ImFont* italic[SizeLevel::SIZE_COUNT]{};
+        ImFont* boldItalic[SizeLevel::SIZE_COUNT]{};
+        ImFont* code[SizeLevel::SIZE_COUNT]{};
     } mdFonts;
 
     struct IconFonts {
-        ImFont* regular = nullptr;
-        ImFont* solid = nullptr;
-        ImFont* brands = nullptr;
+        ImFont* outlined[SizeLevel::SIZE_COUNT]{};
     } iconFonts;
 
     // Private methods for loading fonts
-    ImFont* LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize) 
+    void LoadMarkdownFonts(ImGuiIO& imguiIO, ImFont* fallbackFont, const std::array<float, SizeLevel::SIZE_COUNT>& fontSizes)
+    {
+        const char* mdFontPaths[] = {
+            IMGUI_FONT_PATH_INTER_REGULAR,
+            IMGUI_FONT_PATH_INTER_BOLD,
+            IMGUI_FONT_PATH_INTER_ITALIC,
+            IMGUI_FONT_PATH_INTER_BOLDITALIC,
+            IMGUI_FONT_PATH_FIRACODE_REGULAR
+        };
+
+        for (int8_t i = SizeLevel::SM; i <= SizeLevel::XL; ++i)
+        {
+            float size = fontSizes[i];
+            mdFonts.regular[i] = LoadFont(imguiIO, mdFontPaths[REGULAR], fallbackFont, size);
+            mdFonts.bold[i] = LoadFont(imguiIO, mdFontPaths[BOLD], mdFonts.regular[i], size);
+            mdFonts.italic[i] = LoadFont(imguiIO, mdFontPaths[ITALIC], mdFonts.regular[i], size);
+            mdFonts.boldItalic[i] = LoadFont(imguiIO, mdFontPaths[BOLDITALIC], mdFonts.bold[i], size);
+            mdFonts.code[i] = LoadFont(imguiIO, mdFontPaths[CODE], mdFonts.regular[i], size);
+        }
+    }
+
+    void LoadIconFonts(ImGuiIO& imguiIO, const std::array<float, SizeLevel::SIZE_COUNT>& fontSizes)
+    {
+        const char* iconFontPath = IMGUI_FONT_PATH_OUTLINED;
+
+        for (int8_t i = SizeLevel::SM; i <= SizeLevel::XL; ++i)
+        {
+            float size = fontSizes[i];
+            iconFonts.outlined[i] = LoadIconFont(imguiIO, iconFontPath, size);
+        }
+    }
+
+    ImFont* LoadFont(ImGuiIO& imguiIO, const char* fontPath, ImFont* fallbackFont, float fontSize)
     {
         ImFont* font = imguiIO.Fonts->AddFontFromFileTTF(fontPath, fontSize);
-        if (font == nullptr) 
+        if (!font)
         {
             std::cerr << "Failed to load font: " << fontPath << std::endl;
             return fallbackFont;
@@ -102,24 +156,19 @@ private:
         return font;
     }
 
-    ImFont* LoadIconFont(ImGuiIO& imguiIO, const char* iconFontPath, float fontSize) 
+    ImFont* LoadIconFont(ImGuiIO& imguiIO, const char* iconFontPath, float fontSize)
     {
-        static const ImWchar icons_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+        static const ImWchar icons_ranges[] = { ICON_MIN_MS, ICON_MAX_MS, 0 };
         ImFontConfig icons_config;
-        icons_config.MergeMode = true;
+        icons_config.MergeMode = false;
         icons_config.PixelSnapH = true;
         icons_config.GlyphMinAdvanceX = fontSize;
 
-        if (!mdFonts.regular) 
-        {
-            mdFonts.regular = LoadFont(imguiIO, IMGUI_FONT_PATH_INTER_REGULAR, imguiIO.Fonts->AddFontDefault(), fontSize);
-        }
-
         ImFont* iconFont = imguiIO.Fonts->AddFontFromFileTTF(iconFontPath, fontSize, &icons_config, icons_ranges);
-        if (iconFont == nullptr) 
+        if (iconFont == nullptr)
         {
             std::cerr << "Failed to load icon font: " << iconFontPath << std::endl;
-            return mdFonts.regular;
+            return mdFonts.regular[MD];
         }
 
         return iconFont;

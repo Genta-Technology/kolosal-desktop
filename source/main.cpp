@@ -109,7 +109,7 @@ void InitializeImGui(Window& window)
     ImGui::StyleColorsDark();
 
     // Initialize font manager
-    FontsManager::GetInstance().LoadFonts(imguiIO);
+    FontsManager::GetInstance();
 
     ImGui_ImplWin32_Init(window.getNativeHandle());
     ImGui_ImplOpenGL3_Init("#version 330");

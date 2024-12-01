@@ -23,12 +23,12 @@ namespace Config
     // Constants to replace magic numbers
     namespace Font
     {
-        constexpr float DEFAULT_FONT_SIZE = 16.0F;
+        constexpr float DEFAULT_FONT_SIZE = 18.0F;
     } // namespace Font
 
     namespace Icon
     {
-        constexpr float DEFAULT_FONT_SIZE = 14.0F;
+        constexpr float DEFAULT_FONT_SIZE = 18.0F;
     } // namespace Icon
 
     namespace BackgroundColor

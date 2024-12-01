@@ -39,7 +39,8 @@ struct ButtonConfig
     ImVec2 size;
     std::optional<float> gap = 5.0F;
     std::function<void()> onClick;
-    std::optional<bool> iconSolid;
+    std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
+    std::optional<FontsManager::IconType> iconType = FontsManager::OUTLINED;
     std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT_COL;
     std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
@@ -62,8 +63,8 @@ struct LabelConfig
     std::optional<float> iconPaddingX = 5.0F;
     std::optional<float> iconPaddingY = 5.0F;
     std::optional<float> gap = 5.0F;
-    std::optional<bool> isBold = false;
-    std::optional<bool> iconSolid = false;
+	std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
+    std::optional<FontsManager::IconType> iconType = FontsManager::OUTLINED;
     std::optional<Alignment> alignment = Alignment::CENTER;
 };
 
@@ -118,15 +119,8 @@ namespace Label
 
         if (hasIcon)
         {
-            // Select font based on icon style
-            if (config.iconSolid.value())
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::SOLID));
-            }
-            else
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
-            }
+			ImFont* iconFont = FontsManager::GetInstance().GetIconFont(config.iconType.value());
+            ImGui::PushFont(iconFont);
 
             // Render icon
             ImGui::Text("%s", config.icon.value().c_str());
@@ -135,15 +129,8 @@ namespace Label
             ImGui::PopFont(); // Pop icon font
         }
 
-        // Render label text with specified font weight
-        if (config.isBold.value())
-        {
-            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::BOLD));
-        }
-        else
-        {
-            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::REGULAR));
-        }
+        // Render label text with specified font type
+        ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value()));
 
         ImGui::Text("%s", config.label.c_str());
 
@@ -175,14 +162,8 @@ namespace Label
         float iconPlusGapWidth = 0.0f;
         if (hasIcon)
         {
-            if (config.iconSolid.value())
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::SOLID));
-            }
-            else
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
-            }
+            ImGui::PushFont(FontsManager::GetInstance().GetIconFont(config.iconType.value()));
+
             iconSize = ImGui::CalcTextSize(config.icon.value().c_str());
             ImGui::PopFont();
 
@@ -198,14 +179,7 @@ namespace Label
         std::string truncatedLabel;
         if (hasLabel)
         {
-            if (config.isBold.value())
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::BOLD));
-            }
-            else
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::REGULAR));
-            }
+            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value()));
 
             labelSize = ImGui::CalcTextSize(config.label.c_str());
 
@@ -276,14 +250,7 @@ namespace Label
         // Now render the icon and/or label
         if (hasIcon)
         {
-            if (config.iconSolid.value())
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::SOLID));
-            }
-            else
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetIconFont(FontsManager::REGULAR));
-            }
+            ImGui::PushFont(FontsManager::GetInstance().GetIconFont(config.iconType.value()));
 
             ImGui::TextUnformatted(config.icon.value().c_str());
             if (hasLabel)
@@ -297,14 +264,7 @@ namespace Label
         // Render truncated label text with specified font weight, if it exists
         if (hasLabel)
         {
-            if (config.isBold.value())
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::BOLD));
-            }
-            else
-            {
-                ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(FontsManager::REGULAR));
-            }
+            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value()));
 
             ImGui::TextUnformatted(truncatedLabel.c_str());
             ImGui::PopFont();
@@ -372,8 +332,8 @@ namespace Button
         labelConfig.label = config.label.value_or("");
         labelConfig.icon = config.icon.value_or("");
         labelConfig.size = config.size;
-        labelConfig.isBold = false; // Set according to your needs
-        labelConfig.iconSolid = config.iconSolid.value_or(false);
+        labelConfig.fontType = config.fontType.value_or(FontsManager::REGULAR);
+        labelConfig.iconType = config.iconType.value_or(FontsManager::OUTLINED);
         labelConfig.gap = config.gap.value_or(5.0f);
         labelConfig.alignment = config.alignment.value_or(Alignment::CENTER);
 
@@ -644,8 +604,6 @@ namespace Slider
         labelConfig.id = label;
         labelConfig.label = renderLabel;
         labelConfig.size = ImVec2(0, 0);
-        labelConfig.isBold = false;
-        labelConfig.iconSolid = false;
         Label::render(labelConfig);
 
         // Move the cursor to the right edge minus the input field width and padding
@@ -742,8 +700,6 @@ namespace IntInputField
         labelConfig.id = label;
         labelConfig.label = renderLabel;
         labelConfig.size = ImVec2(0, 0);
-        labelConfig.isBold = false;
-        labelConfig.iconSolid = false;
         Label::render(labelConfig);
 
         ImGui::SetCursorPosY(ImGui::GetCursorPosY());

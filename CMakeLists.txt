@@ -57,9 +57,9 @@ set(FONT_DEFINITIONS
     IMGUI_FONT_PATH_INTER_BOLD="fonts/Inter-Bold.ttf"
     IMGUI_FONT_PATH_INTER_BOLDITALIC="fonts/Inter-BoldItalic.ttf"
     IMGUI_FONT_PATH_INTER_ITALIC="fonts/Inter-Italic.ttf"
-    IMGUI_FONT_PATH_FA_BRANDS="fonts/fa-brands-400.otf"
-    IMGUI_FONT_PATH_FA_REGULAR="fonts/fa-regular-400.otf"
-    IMGUI_FONT_PATH_FA_SOLID="fonts/fa-solid-900.otf"
+    IMGUI_FONT_PATH_OUTLINED="fonts/MaterialSymbolsOutlined[FILL,GRAD,opsz,wght].ttf"
+    IMGUI_FONT_PATH_ROUNDED="fonts/MaterialSymbolsRounded[FILL,GRAD,opsz,wght].ttf"
+    IMGUI_FONT_PATH_SHARP="fonts/MaterialSymbolsSharp[FILL,GRAD,opsz,wght].ttf"
 )
 
 # ==== Kolosal Library ====

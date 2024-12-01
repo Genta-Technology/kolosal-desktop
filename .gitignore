@@ -38,3 +38,6 @@
 # build folder
 build/*
 out/*
+
+# debugging files
+*.pdb
