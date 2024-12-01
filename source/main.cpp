@@ -122,7 +122,7 @@ void InitializeGradientBackground(int display_w, int display_h)
     GradientBackground::setupFullScreenQuad();
 }
 
-void renderPlayground(float chatHistorySidebarWidth, float modelPresetSidebarWidth)
+void renderPlayground(float& chatHistorySidebarWidth, float& modelPresetSidebarWidth)
 {
     renderChatHistorySidebar(chatHistorySidebarWidth);
     renderModelPresetSidebar(modelPresetSidebarWidth);
