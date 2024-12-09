@@ -30,7 +30,7 @@ message(STATUS "Found OpenSSL: ${OPENSSL_INCLUDE_DIR}")
 message(STATUS "    - OpenSSL Libraries: ${OPENSSL_LIBRARIES}")
 
 set(OPENSSL_DLL_DIR "${OPENSSL_INCLUDE_DIR}/../bin")
-message(STATUS "    -OpenSSL DLL Directory: ${OPENSSL_DLL_DIR}")
+message(STATUS "    - OpenSSL DLL Directory: ${OPENSSL_DLL_DIR}")
 
 # GLAD
 add_library(glad STATIC ${EXTERNAL_DIR}/glad/src/glad.c)
@@ -38,6 +38,15 @@ target_include_directories(glad PUBLIC ${EXTERNAL_DIR}/glad/include)
 
 # Native File Dialog Extended
 add_subdirectory(${EXTERNAL_DIR}/nativefiledialog-extended)
+
+# CURL
+set(CMAKE_PREFIX_PATH "${EXTERNAL_DIR}/curl" ${CMAKE_PREFIX_PATH})
+
+find_package(CURL REQUIRED)
+if(NOT CURL_FOUND)
+    message(FATAL_ERROR "CURL not found")
+endif()
+message(STATUS "Found CURL: ${CURL_INCLUDE_DIR}")
 
 # ==== ImGui Configuration ====
 set(IMGUI_SOURCES
@@ -83,6 +92,7 @@ target_include_directories(kolosal_lib PUBLIC
     ${EXTERNAL_DIR}/stb
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/assets
+    ${CURL_INCLUDE_DIR}
 )
 
 # Platform-specific library dependencies
@@ -99,6 +109,7 @@ if(WIN32)
         gdi32
         shell32
         OpenSSL::SSL
+        ${CURL_LIBRARIES}
     )
     
     target_compile_definitions(kolosal_lib PUBLIC
@@ -164,4 +175,18 @@ add_custom_command(
         "${OPENSSL_DLL_DIR}/libssl-3-x64.dll"
         "$<TARGET_FILE_DIR:KolosalDesktop>"
     COMMENT "Copying OpenSSL DLLs to output directory"
+)
+
+# Copy models folder
+add_custom_command(
+    TARGET KolosalDesktop POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${CMAKE_SOURCE_DIR}/models" "$<TARGET_FILE_DIR:KolosalDesktop>/models"
+)
+
+# Copy curl DLLs from external/curl/bin
+add_custom_command(
+    TARGET KolosalDesktop POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    "${EXTERNAL_DIR}/curl/bin" "$<TARGET_FILE_DIR:KolosalDesktop>"
 )

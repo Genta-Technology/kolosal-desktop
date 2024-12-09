@@ -12,6 +12,7 @@
 
 #include "chat/chat_manager.hpp"
 #include "model/preset_manager.hpp"
+#include "model/model_manager.hpp"
 
 #include "nfd.h"
 
@@ -21,6 +22,7 @@
 #include <imgui.h>
 #include <imgui_impl_win32.h>
 #include <imgui_impl_opengl3.h>
+#include <curl/curl.h>
 
 class ScopedCleanup
 {
@@ -172,9 +174,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         // Initialize ImGui
         InitializeImGui(*window);
 
-        // Initialize the chat manager and preset manager
+        // Initialize the chat manager, preset manager, and model manager
         Chat::initializeChatManager();
         Model::initializePresetManager();
+        Model::initializeModelManager();
 
         // Initialize NFD (Native File Dialog)
         NFD_Init();

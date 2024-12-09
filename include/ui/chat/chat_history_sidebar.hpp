@@ -36,8 +36,9 @@ inline void renderChatHistoryList(ImVec2 contentArea)
         // Add tooltip showing last modified time
         if (ImGui::IsItemHovered()) {
             std::time_t time = static_cast<std::time_t>(chat.lastModified);
-            std::string timeStr = std::ctime(&time);
-            ImGui::SetTooltip("Last modified: %s", timeStr.c_str());
+            char timeStr[26];
+            ctime_s(timeStr, sizeof(timeStr), &time);
+            ImGui::SetTooltip("Last modified: %s", timeStr);
         }
 
         Button::render(chatButtonConfig);

@@ -117,7 +117,7 @@ void titleBar(void* handler)
             {
                 const char* icon = ICON_CI_CHROME_MINIMIZE;
                 ImVec2 iconPos = ImGui::GetItemRectMin();
-                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 3;
+                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 4;
                 iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
 
                 // Select icon font
@@ -158,7 +158,7 @@ void titleBar(void* handler)
             {
                 const char* icon = IsZoomed(hwnd) ? ICON_CI_CHROME_RESTORE : ICON_CI_CHROME_MAXIMIZE;
                 ImVec2 iconPos = ImGui::GetItemRectMin();
-                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 3;
+                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 4;
                 iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
 
                 // Select icon font
@@ -195,7 +195,7 @@ void titleBar(void* handler)
             {
                 const char* icon = ICON_CI_CHROME_CLOSE;
                 ImVec2 iconPos = ImGui::GetItemRectMin();
-                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 3;
+                iconPos.x += ((buttonWidth - ImGui::CalcTextSize(icon).x) / 2.0f) - 4;
                 iconPos.y += (buttonHeight - ImGui::CalcTextSize(icon).y) / 2.0f;
 
                 // Select icon font

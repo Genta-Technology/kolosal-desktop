@@ -26,5 +26,9 @@ inline auto stringToTimePoint(const std::string& str) -> std::chrono::system_clo
 
 inline auto RGBAToImVec4(const float r, const float g, const float b, const float a) -> ImVec4
 {
+    assert(r >= 0 && r <= 255);
+    assert(g >= 0 && g <= 255);
+    assert(b >= 0 && b <= 255);
+
     return ImVec4(r / 255, g / 255, b / 255, a / 255);
 }

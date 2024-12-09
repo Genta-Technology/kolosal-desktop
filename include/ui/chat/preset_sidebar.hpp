@@ -108,102 +108,51 @@ void confirmSaveAsDialog(std::string& newPresetName)
     }
 }
 
-static std::string newPresetName;
-
-/**
- * @brief Renders the "Save Preset As" dialog for saving a model preset under a new name.
- */
 void renderSaveAsDialog(bool& showSaveAsDialog)
 {
-    if (showSaveAsDialog)
+    static std::string newPresetName;
+    ModalConfig ModalConfig
     {
-        ImGui::OpenPopup("Save Preset As");
-        showSaveAsDialog = false;
-    }
-
-    // Style adjustments
-    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.125F, 0.125F, 0.125F, 1.0F));       // Inactive state color
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-
-    if (ImGui::BeginPopupModal("Save Preset As", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        static bool focusNewPresetName = true;
-
-        // Set the new preset name to the current preset name by default
-        if (newPresetName.empty())
+        "Save Preset As",
+        "Save As New Preset",
+        ImVec2(300, 98),
+        [&]()
         {
-            auto currentPresetOpt = Model::PresetManager::getInstance().getCurrentPreset();
-            if (currentPresetOpt)
+            static bool focusNewPresetName = true;
+            if (newPresetName.empty())
             {
-                newPresetName = currentPresetOpt->get().name;
+                auto currentPresetOpt = Model::PresetManager::getInstance().getCurrentPreset();
+                if (currentPresetOpt)
+                {
+                    newPresetName = currentPresetOpt->get().name;
+                }
             }
-        }
 
-        auto processInput = [](const std::string& input) {
-            if (Model::PresetManager::getInstance().copyCurrentPresetAs(input).get())
-            {
-                Model::PresetManager::getInstance().switchPreset(input);
-                ImGui::CloseCurrentPopup();
-                newPresetName.clear();
-            }
+            // Input field configuration
+            InputFieldConfig inputConfig(
+                "##newpresetname",
+                ImVec2(ImGui::GetWindowSize().x - 32.0F, 0),
+                newPresetName,
+                focusNewPresetName);
+            inputConfig.placeholderText = "Enter new preset name...";
+            inputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue;
+            inputConfig.frameRounding = 5.0F;
+            inputConfig.processInput = [](const std::string& input) {
+                if (Model::PresetManager::getInstance().copyCurrentPresetAs(input).get())
+                {
+                    Model::PresetManager::getInstance().switchPreset(input);
+                    ImGui::CloseCurrentPopup();
+                    newPresetName.clear();
+                }
             };
 
-        // Input field for the new preset name
-        InputFieldConfig newPresetNameInputConfig(
-            "##newpresetname",       // ID
-            ImVec2(250, 0),          // Size
-            newPresetName,           // Input text buffer
-            focusNewPresetName);     // Focus
-        newPresetNameInputConfig.placeholderText = "Enter new preset name...";
-        newPresetNameInputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue;
-        newPresetNameInputConfig.processInput = processInput;
-        newPresetNameInputConfig.frameRounding = 5.0F;
-        InputField::render(newPresetNameInputConfig);
+            InputField::render(inputConfig);
+        },
+        showSaveAsDialog
+    };
+    ModalConfig.padding = ImVec2(16.0F, 8.0F);
 
-        ImGui::Spacing();
-
-        // Save and Cancel buttons
-        ButtonConfig confirmSaveConfig;
-        confirmSaveConfig.id = "##confirmSave";
-        confirmSaveConfig.label = "Save";
-        confirmSaveConfig.icon = std::nullopt;
-        confirmSaveConfig.size = ImVec2(122.5F, 0);
-        confirmSaveConfig.onClick = [&]() {
-            if (Model::PresetManager::getInstance().copyCurrentPresetAs(newPresetName).get())
-            {
-                Model::PresetManager::getInstance().switchPreset(newPresetName);
-                ImGui::CloseCurrentPopup();
-                newPresetName.clear();
-            }
-            };
-        confirmSaveConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
-        confirmSaveConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
-        confirmSaveConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
-
-        ButtonConfig cancelSaveConfig;
-        cancelSaveConfig.id = "##cancelSave";
-        cancelSaveConfig.label = "Cancel";
-        cancelSaveConfig.icon = std::nullopt;
-        cancelSaveConfig.size = ImVec2(122.5F, 0);
-        cancelSaveConfig.onClick = [&]()
-            {
-                ImGui::CloseCurrentPopup();
-                newPresetName.clear();
-            };
-        cancelSaveConfig.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
-        cancelSaveConfig.hoverColor = RGBAToImVec4(53, 132, 228, 255);
-        cancelSaveConfig.activeColor = RGBAToImVec4(26, 95, 180, 255);
-
-        std::vector<ButtonConfig> saveAsDialogButtons = { confirmSaveConfig, cancelSaveConfig };
-        Button::renderGroup(saveAsDialogButtons, ImGui::GetCursorPosX(), ImGui::GetCursorPosY(), 10);
-
-        ImGui::EndPopup();
-    }
-
-    // Revert to the previous style
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar();
+    ModalWindow::render(ModalConfig);
 }
 
 /**
@@ -214,9 +163,6 @@ void renderSaveAsDialog(bool& showSaveAsDialog)
 void renderModelPresetsSelection(const float sidebarWidth)
 {
     static bool showSaveAsDialog = false;
-
-    ImGui::Spacing();
-    ImGui::Spacing();
 
     // Model presets label
     {

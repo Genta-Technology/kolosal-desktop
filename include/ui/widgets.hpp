@@ -7,8 +7,10 @@
 #include <functional>
 #include <algorithm>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "config.hpp"
+#include "common.hpp"
 #include "ui/fonts.hpp"
 
 enum ButtonState
@@ -41,9 +43,13 @@ struct ButtonConfig
     std::function<void()> onClick;
     std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
     std::optional<FontsManager::IconType> iconType = FontsManager::CODICON;
+    std::optional<FontsManager::SizeLevel> fontSize = FontsManager::MD;
     std::optional<ImVec4> backgroundColor = Config::Color::TRANSPARENT_COL;
     std::optional<ImVec4> hoverColor = Config::Color::SECONDARY;
     std::optional<ImVec4> activeColor = Config::Color::PRIMARY;
+    std::optional<ImVec4> textColor = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
+    std::optional<ImVec4> borderColor = Config::Color::TRANSPARENT_COL;
+    std::optional<float> borderSize = 0.0F;
     std::optional<ButtonState> state = ButtonState::NORMAL;
     std::optional<Alignment> alignment = Alignment::CENTER;
 };
@@ -63,9 +69,11 @@ struct LabelConfig
     std::optional<float> iconPaddingX = 5.0F;
     std::optional<float> iconPaddingY = 5.0F;
     std::optional<float> gap = 5.0F;
-	std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
+    std::optional<FontsManager::FontType> fontType = FontsManager::REGULAR;
     std::optional<FontsManager::IconType> iconType = FontsManager::CODICON;
+    std::optional<FontsManager::SizeLevel> fontSize = FontsManager::MD;
     std::optional<Alignment> alignment = Alignment::CENTER;
+    std::optional<ImVec4> color = ImVec4(1.0F, 1.0F, 1.0F, 1.0F);
 };
 
 /**
@@ -75,15 +83,15 @@ struct LabelConfig
  * size, input text buffer, placeholder text, flags, process input function, focus input field flag,
  * frame rounding, padding, background color, hover color, active color, and text color.
  */
-struct InputFieldConfig 
+struct InputFieldConfig
 {
     std::string id;
     ImVec2 size;
-    std::string& inputTextBuffer;
-    bool& focusInputField;
+    std::string &inputTextBuffer;
+    bool &focusInputField;
     std::string placeholderText = "";
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
-    std::function<void(const std::string&)> processInput;
+    std::function<void(const std::string &)> processInput;
     float frameRounding = Config::InputField::FRAME_ROUNDING;
     ImVec2 padding = ImVec2(Config::FRAME_PADDING_X, Config::FRAME_PADDING_Y);
     ImVec4 backgroundColor = Config::InputField::INPUT_FIELD_BG_COLOR;
@@ -93,14 +101,27 @@ struct InputFieldConfig
 
     // Constructor
     InputFieldConfig(
-        const std::string& id,
-        const ImVec2& size,
-        std::string& inputTextBuffer,
-        bool& focusInputField)
+        const std::string &id,
+        const ImVec2 &size,
+        std::string &inputTextBuffer,
+        bool &focusInputField)
         : id(id),
-        size(size),
-        inputTextBuffer(inputTextBuffer),
-        focusInputField(focusInputField) {}
+          size(size),
+          inputTextBuffer(inputTextBuffer),
+          focusInputField(focusInputField) {}
+};
+
+struct ModalConfig
+{
+    std::string id;
+    std::string title;
+    ImVec2 size;
+    std::function<void()> content;
+    bool &openFlag;
+    std::optional<ImGuiWindowFlags> flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar;
+    std::optional<ImVec2> padding = ImVec2(16.0F, 16.0F);
+    std::optional<float> headerHeight = 32.0F;
+    std::optional<float> closeButtonSize = 32.0F;
 };
 
 namespace Label
@@ -110,7 +131,7 @@ namespace Label
      *
      * @param config The configuration for the label.
      */
-    void render(const LabelConfig& config)
+    void render(const LabelConfig &config)
     {
         bool hasIcon = !config.icon.value().empty();
 
@@ -119,22 +140,30 @@ namespace Label
 
         if (hasIcon)
         {
-			ImFont* iconFont = FontsManager::GetInstance().GetIconFont(config.iconType.value());
+            ImFont *iconFont = FontsManager::GetInstance().GetIconFont(config.iconType.value(), config.fontSize.value());
             ImGui::PushFont(iconFont);
+
+            // Set icon color
+            ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
 
             // Render icon
             ImGui::Text("%s", config.icon.value().c_str());
             ImGui::SameLine(0, (config.size.x / 4) + config.gap.value());
 
-            ImGui::PopFont(); // Pop icon font
+            ImGui::PopFont();       // Pop icon font
+            ImGui::PopStyleColor(); // Pop icon color
         }
 
         // Render label text with specified font type
-        ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value()));
+        ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value(), config.fontSize.value()));
+
+        // Set label color
+        ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
 
         ImGui::Text("%s", config.label.c_str());
 
         ImGui::PopFont();
+        ImGui::PopStyleColor();
     }
 
     /**
@@ -146,7 +175,7 @@ namespace Label
      *
      * @see Config::LabelConfig
      */
-    void render(const LabelConfig& config, ImVec2 rectMin, ImVec2 rectMax)
+    void render(const LabelConfig &config, ImVec2 rectMin, ImVec2 rectMax)
     {
         bool hasIcon = !config.icon.value().empty();
         bool hasLabel = !config.label.empty();
@@ -162,7 +191,7 @@ namespace Label
         float iconPlusGapWidth = 0.0f;
         if (hasIcon)
         {
-            ImGui::PushFont(FontsManager::GetInstance().GetIconFont(config.iconType.value()));
+            ImGui::PushFont(FontsManager::GetInstance().GetIconFont(config.iconType.value(), config.fontSize.value()));
 
             iconSize = ImGui::CalcTextSize(config.icon.value().c_str());
             ImGui::PopFont();
@@ -179,7 +208,7 @@ namespace Label
         std::string truncatedLabel;
         if (hasLabel)
         {
-            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value()));
+            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value(), config.fontSize.value()));
 
             labelSize = ImGui::CalcTextSize(config.label.c_str());
 
@@ -250,7 +279,10 @@ namespace Label
         // Now render the icon and/or label
         if (hasIcon)
         {
-            ImGui::PushFont(FontsManager::GetInstance().GetIconFont(config.iconType.value()));
+            ImGui::PushFont(FontsManager::GetInstance().GetIconFont(config.iconType.value(), config.fontSize.value()));
+
+            // Set icon color
+            ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
 
             ImGui::TextUnformatted(config.icon.value().c_str());
             if (hasLabel)
@@ -259,21 +291,126 @@ namespace Label
             }
 
             ImGui::PopFont();
+            ImGui::PopStyleColor();
         }
 
         // Render truncated label text with specified font weight, if it exists
         if (hasLabel)
         {
-            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value()));
+            ImGui::PushFont(FontsManager::GetInstance().GetMarkdownFont(config.fontType.value(), config.fontSize.value()));
+
+            // Set label color
+            ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
 
             ImGui::TextUnformatted(truncatedLabel.c_str());
             ImGui::PopFont();
+            ImGui::PopStyleColor();
         }
 
         // Pop the clipping rectangle
         ImGui::PopClipRect();
     }
-}
+
+    void renderMultiline(const LabelConfig &config, std::optional<int> maxLines = std::nullopt)
+    {
+        bool hasIcon = !config.icon.value().empty();
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + config.iconPaddingX.value());
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + config.iconPaddingY.value());
+
+        if (hasIcon)
+        {
+            ImFont *iconFont = FontsManager::GetInstance().GetIconFont(
+                config.iconType.value(), config.fontSize.value());
+            ImGui::PushFont(iconFont);
+
+            // Set icon color
+            ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
+
+            // Render icon
+            ImGui::Text("%s", config.icon.value().c_str());
+            ImGui::SameLine(0, config.gap.value());
+
+            ImGui::PopFont();
+            ImGui::PopStyleColor();
+        }
+
+        ImFont *markdownFont = FontsManager::GetInstance().GetMarkdownFont(
+            config.fontType.value(), config.fontSize.value());
+        ImGui::PushFont(markdownFont);
+
+        float wrap_width = (config.size.x > 0) ? config.size.x : ImGui::GetContentRegionAvail().x;
+
+        if (maxLines.has_value())
+        {
+            // First pass: Calculate text height without wrapping
+            ImVec2 text_size = ImGui::CalcTextSize(config.label.c_str());
+            float line_height = ImGui::GetTextLineHeightWithSpacing();
+
+            // Second pass: Render with wrapping
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + wrap_width);
+
+            std::string text = config.label;
+            size_t start = 0;
+            int line_count = 0;
+            bool need_ellipsis = false;
+
+            while (start < text.length() && (!maxLines.has_value() || line_count < maxLines.value()))
+            {
+                size_t end = text.find('\n', start);
+                if (end == std::string::npos)
+                    end = text.length();
+
+                std::string line = text.substr(start, end - start);
+
+                // Set text color
+                ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
+
+                ImGui::TextUnformatted(line.c_str());
+
+                // Pop text color
+                ImGui::PopStyleColor();
+
+                line_count++;
+                start = end + 1;
+
+                if (start < text.length() && maxLines.has_value() && line_count >= maxLines.value())
+                {
+                    need_ellipsis = true;
+                    break;
+                }
+            }
+
+            if (need_ellipsis)
+            {
+                // Set text color
+                ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
+
+                ImGui::TextUnformatted("...");
+
+                // Pop text color
+                ImGui::PopStyleColor();
+            }
+
+            ImGui::PopTextWrapPos();
+        }
+        else
+        {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + wrap_width);
+            // Set text color
+            ImGui::PushStyleColor(ImGuiCol_Text, config.color.value());
+
+            ImGui::TextUnformatted(config.label.c_str());
+
+            // Pop text color
+            ImGui::PopStyleColor();
+
+            ImGui::PopTextWrapPos();
+        }
+
+        ImGui::PopFont();
+    }
+} // namespace Label
 
 namespace Button
 {
@@ -282,7 +419,7 @@ namespace Button
      *
      * @param config The configuration for the button.
      */
-    void render(const ButtonConfig& config)
+    void render(const ButtonConfig &config)
     {
         // Handle button state and styles as before
         ButtonState currentState = config.state.value_or(ButtonState::NORMAL);
@@ -315,6 +452,10 @@ namespace Button
         // Set the border radius (rounding) for the button
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Config::Button::RADIUS);
 
+        // Set the border size and color for the button
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, config.borderSize.value_or(0.0F));
+        ImGui::PushStyleColor(ImGuiCol_Border, config.borderColor.value_or(Config::Color::TRANSPARENT_COL));
+
         // Render the button with an empty label
         if (ImGui::Button(config.id.c_str(), config.size) &&
             config.onClick && currentState != ButtonState::DISABLED && currentState != ButtonState::ACTIVE)
@@ -336,13 +477,14 @@ namespace Button
         labelConfig.iconType = config.iconType.value_or(FontsManager::CODICON);
         labelConfig.gap = config.gap.value_or(5.0f);
         labelConfig.alignment = config.alignment.value_or(Alignment::CENTER);
+        labelConfig.color = config.textColor.value_or(ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
 
         // Render the label inside the button's rectangle
         Label::render(labelConfig, buttonMin, buttonMax);
 
         // Pop styles
-        ImGui::PopStyleColor(3);
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(4);
+        ImGui::PopStyleVar(3);
     }
 
     /**
@@ -353,7 +495,7 @@ namespace Button
      * @param startY The Y-coordinate to start rendering the buttons.
      * @param spacing The spacing between buttons.
      */
-    void renderGroup(const std::vector<ButtonConfig>& buttons, float startX, float startY, float spacing = Config::Button::SPACING)
+    void renderGroup(const std::vector<ButtonConfig> &buttons, float startX, float startY, float spacing = Config::Button::SPACING)
     {
         ImGui::SetCursorPosX(startX);
         ImGui::SetCursorPosY(startY);
@@ -383,7 +525,7 @@ namespace InputField
      * @param framePadding The padding of the input field frame.
      * @param bgColor The background color of the input field.
      */
-    void setStyle(const InputFieldConfig& config)
+    void setStyle(const InputFieldConfig &config)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, config.frameRounding);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, config.padding);
@@ -412,7 +554,7 @@ namespace InputField
      * @param processInput The function to process the input text.
      * @param clearInput The flag to clear the input text after submission.
      */
-    void handleSubmission(char* inputText, bool& focusInputField, const std::function<void(const std::string&)>& processInput, bool clearInput)
+    void handleSubmission(char *inputText, bool &focusInputField, const std::function<void(const std::string &)> &processInput, bool clearInput)
     {
         std::string inputStr(inputText);
         inputStr.erase(0, inputStr.find_first_not_of(" \n\r\t"));
@@ -441,7 +583,7 @@ namespace InputField
      * @param processInput The function to process the input text.
      * @param focusInputField The flag to focus the input field.
      */
-    void renderMultiline(const InputFieldConfig& config)
+    void renderMultiline(const InputFieldConfig &config)
     {
         // Set style
         setStyle(config);
@@ -459,8 +601,8 @@ namespace InputField
         if (ImGui::InputTextMultiline(config.id.c_str(), config.inputTextBuffer.data(), Config::InputField::TEXT_SIZE, config.size, config.flags) && config.processInput)
         {
             InputField::handleSubmission(config.inputTextBuffer.data(), config.focusInputField, config.processInput,
-                (config.flags & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
-                (config.flags & ImGuiInputTextFlags_ShiftEnterForNewLine));
+                                         (config.flags & ImGuiInputTextFlags_CtrlEnterForNewLine) ||
+                                             (config.flags & ImGuiInputTextFlags_ShiftEnterForNewLine));
         }
 
         ImGui::PopTextWrapPos();
@@ -472,7 +614,7 @@ namespace InputField
             ImGui::SetItemAllowOverlap();
 
             // Get the current window's draw list
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
 
             // Get the input field's bounding box
             ImVec2 inputMin = ImGui::GetItemRectMin();
@@ -512,12 +654,14 @@ namespace InputField
      * @param processInput The function to process the input text.
      * @param focusInputField The flag to focus the input field.
      */
-    void render(const InputFieldConfig& config) {
+    void render(const InputFieldConfig &config)
+    {
         // Set style
         setStyle(config);
 
         // Set keyboard focus initially, then reset
-        if (config.focusInputField) {
+        if (config.focusInputField)
+        {
             ImGui::SetKeyboardFocusHere();
             config.focusInputField = false;
         }
@@ -525,38 +669,42 @@ namespace InputField
         ImGui::PushItemWidth(config.size.x);
 
         // Prepare callback data
-        struct InputTextCallback_UserData {
-            std::string* Str;
+        struct InputTextCallback_UserData
+        {
+            std::string *Str;
         };
 
         InputTextCallback_UserData user_data;
         user_data.Str = &config.inputTextBuffer;
 
-        auto callback = [](ImGuiInputTextCallbackData* data) -> int {
-            if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-                InputTextCallback_UserData* user_data = (InputTextCallback_UserData*)data->UserData;
-                std::string* str = user_data->Str;
+        auto callback = [](ImGuiInputTextCallbackData *data) -> int
+        {
+            if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+            {
+                InputTextCallback_UserData *user_data = (InputTextCallback_UserData *)data->UserData;
+                std::string *str = user_data->Str;
                 str->resize(data->BufTextLen);
-                data->Buf = (char*)str->c_str();
+                data->Buf = (char *)str->c_str();
             }
             return 0;
-            };
+        };
 
         ImGuiInputTextFlags flags = config.flags | ImGuiInputTextFlags_CallbackResize;
 
         // Draw the input field
-        if (ImGui::InputText(config.id.c_str(), (char*)config.inputTextBuffer.c_str(), config.inputTextBuffer.capacity() + 1, flags, callback, &user_data)
-            && config.processInput) {
-            handleSubmission((char*)config.inputTextBuffer.c_str(), config.focusInputField, config.processInput, false);
+        if (ImGui::InputText(config.id.c_str(), (char *)config.inputTextBuffer.c_str(), config.inputTextBuffer.capacity() + 1, flags, callback, &user_data) && config.processInput)
+        {
+            handleSubmission((char *)config.inputTextBuffer.c_str(), config.focusInputField, config.processInput, false);
         }
 
         // Draw placeholder if input is empty
-        if (config.inputTextBuffer.empty()) {
+        if (config.inputTextBuffer.empty())
+        {
             // Allow overlapping rendering
             ImGui::SetItemAllowOverlap();
 
             // Get the current window's draw list
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
 
             // Get the input field's bounding box
             ImVec2 inputMin = ImGui::GetItemRectMin();
@@ -591,7 +739,7 @@ namespace Slider
      * @param paddingX The horizontal padding for the slider.
      * @param inputWidth The width of the input field.
      */
-    void render(const char* label, float& value, float minValue, float maxValue, const float sliderWidth, const char* format = "%.2f", const float paddingX = 5.0F, const float inputWidth = 32.0F)
+    void render(const char *label, float &value, float minValue, float maxValue, const float sliderWidth, const char *format = "%.2f", const float paddingX = 5.0F, const float inputWidth = 32.0F)
     {
         // Get the render label by stripping ## from the label and replacing _ with space
         std::string renderLabel = label;
@@ -656,9 +804,9 @@ namespace Slider
         ImGui::PushStyleColor(ImGuiCol_FrameBg, Config::Slider::TRACK_COLOR);
         ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Config::Slider::TRACK_COLOR);
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Config::Slider::TRACK_COLOR);
-        ImGui::PushStyleColor(ImGuiStyleVar_SliderContrast, 1.0F);
         ImGui::PushStyleColor(ImGuiCol_SliderGrab, Config::Color::TRANSPARENT_COL);
         ImGui::PushStyleColor(ImGuiCol_SliderGrabActive, Config::Slider::GRAB_COLOR);
+        ImGui::PushStyleVar(ImGuiStyleVar_SliderContrast, 1.0F);
         ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, Config::Slider::GRAB_MIN_SIZE);
         ImGui::PushStyleVar(ImGuiStyleVar_GrabRounding, Config::Slider::GRAB_RADIUS);
         ImGui::PushStyleVar(ImGuiStyleVar_SliderThickness, Config::Slider::TRACK_THICKNESS);
@@ -672,8 +820,8 @@ namespace Slider
         ImGui::PopItemWidth();
 
         // Restore previous styling
-        ImGui::PopStyleVar(3);   // FramePadding and GrabRounding
-        ImGui::PopStyleColor(6); // Reset all custom colors
+        ImGui::PopStyleVar(4);   // FramePadding and GrabRounding
+        ImGui::PopStyleColor(5); // Reset all custom colors
     }
 } // namespace Slider
 
@@ -687,7 +835,7 @@ namespace IntInputField
      * @param inputWidth The width of the input field.
      * @param paddingX The horizontal padding for the input field.
      */
-    void render(const char* label, int& value, const float inputWidth, const float paddingX = 5.0F)
+    void render(const char *label, int &value, const float inputWidth, const float paddingX = 5.0F)
     {
         // Get the render label by stripping ## from the label and replacing _ with space
         std::string renderLabel = label;
@@ -739,11 +887,11 @@ namespace ComboBox
      * @param width The width of the combo box.
      * @return bool True if the selected item has changed, false otherwise.
      */
-    auto render(const char* label, const char** items, int itemsCount, int& selectedItem, float width, float height = 28.0F) -> bool
+    auto render(const char *label, const char **items, int itemsCount, int &selectedItem, float width, float height = 28.0F) -> bool
     {
         // Calculate frame padding based on desired height
         ImVec2 framePadding = ImGui::GetStyle().FramePadding;
-        float defaultHeight = ImGui::GetFrameHeight(); // Default frame height
+        float defaultHeight = ImGui::GetFrameHeight();    // Default frame height
         framePadding.y = (height - defaultHeight) * 0.5f; // Adjust vertical padding to achieve desired height
 
         // Push style variables for frame and popup rounding
@@ -791,3 +939,59 @@ namespace ComboBox
         return changed; // Return true if the selected item has changed
     }
 } // namespace ComboBox
+
+namespace ModalWindow
+{
+    void render(ModalConfig &config)
+    {
+        if (config.openFlag)
+        {
+            ImGui::OpenPopup(config.id.c_str());
+            config.openFlag = false;
+        }
+        
+        ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0F, 0.0F, 0.0F, 0.5F));
+
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+        ImGui::SetNextWindowSize(config.size);
+
+        if (ImGui::BeginPopupModal(config.id.c_str(), nullptr, config.flags.value()))
+        {
+            ImVec2 windowSize = ImGui::GetWindowSize();
+
+            // Header section
+            ImGui::BeginGroup();
+            ImGui::SetCursorPos(config.padding.value());
+
+            // Title
+            LabelConfig modalTitle;
+            modalTitle.id = "##modalTitle";
+            modalTitle.label = config.title;
+            modalTitle.fontType = FontsManager::BOLD;
+            modalTitle.alignment = Alignment::LEFT;
+            Label::render(modalTitle);
+
+            // Close button
+            ButtonConfig closeButton;
+            closeButton.id = "##closeModal";
+            closeButton.icon = ICON_CI_CHROME_CLOSE;
+            closeButton.size = ImVec2(config.closeButtonSize.value(), config.closeButtonSize.value());
+            closeButton.onClick = []()
+            { ImGui::CloseCurrentPopup(); };
+
+            Button::renderGroup({closeButton}, windowSize.x - config.closeButtonSize.value() - config.padding.value().x, config.padding.value().y);
+            ImGui::EndGroup();
+
+            // Content section
+            ImGui::SetCursorPos(ImVec2(config.padding.value().x, config.headerHeight.value() + config.padding.value().y * 2));
+            if (config.content)
+            {
+                config.content();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopStyleColor();
+    }
+}

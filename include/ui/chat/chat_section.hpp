@@ -4,6 +4,7 @@
 #include "config.hpp"
 #include "ui/widgets.hpp"
 #include "chat/chat_manager.hpp"
+#include "model/model_manager.hpp"
 
 inline void pushIDAndColors(const Chat::Message msg, int index)
 {
@@ -38,7 +39,7 @@ inline auto calculateDimensions(const Chat::Message msg, float windowWidth) -> s
         paddingX = 0;
     }
 
-    return { bubbleWidth, bubblePadding, paddingX };
+    return {bubbleWidth, bubblePadding, paddingX};
 }
 
 inline void renderMessageContent(const Chat::Message msg, float bubbleWidth, float bubblePadding)
@@ -56,7 +57,7 @@ inline void renderTimestamp(const Chat::Message msg, float bubblePadding)
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7F, 0.7F, 0.7F, 1.0F)); // Light gray for timestamp
 
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - ImGui::GetTextLineHeightWithSpacing() // Align timestamp at the bottom
-        - (bubblePadding - Config::Timing::TIMESTAMP_OFFSET_Y));
+                         - (bubblePadding - Config::Timing::TIMESTAMP_OFFSET_Y));
     ImGui::SetCursorPosX(bubblePadding); // Align timestamp to the left
     ImGui::TextWrapped("%s", timePointToString(msg.timestamp).c_str());
 
@@ -76,11 +77,11 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
         copyButtonConfig.icon = ICON_CI_COPY;
         copyButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
         copyButtonConfig.onClick = [&msg]()
-            {
-                ImGui::SetClipboardText(msg.content.c_str());
-                std::cout << "Copied message content to clipboard" << std::endl;
-            };
-        std::vector<ButtonConfig> userButtons = { copyButtonConfig };
+        {
+            ImGui::SetClipboardText(msg.content.c_str());
+            std::cout << "Copied message content to clipboard" << std::endl;
+        };
+        std::vector<ButtonConfig> userButtons = {copyButtonConfig};
 
         Button::renderGroup(
             userButtons,
@@ -95,9 +96,9 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
         likeButtonConfig.icon = ICON_CI_THUMBSUP;
         likeButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
         likeButtonConfig.onClick = [index]()
-            {
-                std::cout << "Like button clicked for message " << index << std::endl;
-            };
+        {
+            std::cout << "Like button clicked for message " << index << std::endl;
+        };
 
         ButtonConfig dislikeButtonConfig;
         dislikeButtonConfig.id = "##dislike" + std::to_string(index);
@@ -105,11 +106,11 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
         dislikeButtonConfig.icon = ICON_CI_THUMBSDOWN;
         dislikeButtonConfig.size = ImVec2(Config::Button::WIDTH, 0);
         dislikeButtonConfig.onClick = [index]()
-            {
-                std::cout << "Dislike button clicked for message " << index << std::endl;
-            };
+        {
+            std::cout << "Dislike button clicked for message " << index << std::endl;
+        };
 
-        std::vector<ButtonConfig> assistantButtons = { likeButtonConfig, dislikeButtonConfig };
+        std::vector<ButtonConfig> assistantButtons = {likeButtonConfig, dislikeButtonConfig};
 
         Button::renderGroup(
             assistantButtons,
@@ -118,7 +119,7 @@ inline void renderButtons(const Chat::Message msg, int index, float bubbleWidth,
     }
 }
 
-inline void renderMessage(const Chat::Message& msg, int index, float contentWidth)
+inline void renderMessage(const Chat::Message &msg, int index, float contentWidth)
 {
     pushIDAndColors(msg, index);
     float windowWidth = contentWidth;
@@ -139,18 +140,18 @@ inline void renderMessage(const Chat::Message& msg, int index, float contentWidt
         ("MessageCard" + std::to_string(index)).c_str(),
         ImVec2(bubbleWidth, estimatedHeight),
         false,
-        ImGuiWindowFlags_NoScrollbar
-    );
+        ImGuiWindowFlags_NoScrollbar);
 
     renderMessageContent(msg, bubbleWidth, bubblePadding);
-	ImGui::Spacing();
+    ImGui::Spacing();
     renderTimestamp(msg, bubblePadding);
     renderButtons(msg, index, bubbleWidth, bubblePadding);
 
     ImGui::EndChild();
     ImGui::EndGroup();
 
-    if (msg.role == "user") {
+    if (msg.role == "user")
+    {
         ImGui::PopStyleVar();
     }
 
@@ -173,7 +174,7 @@ inline void renderChatHistory(const Chat::ChatHistory chatHistory, float content
     bool isAtBottom = (scrollMaxY <= 0.0F) || (scrollY >= scrollMaxY - 1.0F);
 
     // Render messages
-    const std::vector<Chat::Message>& messages = chatHistory.messages;
+    const std::vector<Chat::Message> &messages = chatHistory.messages;
     for (size_t i = 0; i < messages.size(); ++i)
     {
         renderMessage(messages[i], static_cast<int>(i), contentWidth);
@@ -189,96 +190,275 @@ inline void renderChatHistory(const Chat::ChatHistory chatHistory, float content
     lastMessageCount = currentMessageCount;
 }
 
-static std::string newChatName;
-
-inline void renderRenameChatDialog(bool& showRenameChatDialog)
+inline void renderRenameChatDialog(bool &showRenameChatDialog)
 {
-    if (showRenameChatDialog)
+    static std::string newChatName;
+    ModalConfig modalConfig
     {
-        ImGui::OpenPopup("Rename Chat");
-
-        // Reset the flag to prevent the dialog from opening multiple times
-        showRenameChatDialog = false;
-    }
-
-    // Change the window title background color
-    ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(0.125F, 0.125F, 0.125F, 1.0F));       // Inactive state color
-    ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(0.125F, 0.125F, 0.125F, 1.0F)); // Active state color
-
-    // Apply rounded corners to the window
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
-
-    if (ImGui::BeginPopupModal("Rename Chat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        static bool focusNewChatName = true;
-
-        // Populate newChatName if it's empty (e.g., dialog is opened for the first time)
-        if (newChatName.empty())
+        "Rename Chat",
+        "Rename Chat",
+        ImVec2(300, 98),
+        [&]()
         {
-            auto currentChatName = Chat::ChatManager::getInstance().getCurrentChatName();
-            if (currentChatName.has_value())
+            static bool focusNewChatName = true;
+            if (newChatName.empty())
             {
-                newChatName = currentChatName.value();
+                auto currentChatName = Chat::ChatManager::getInstance().getCurrentChatName();
+                if (currentChatName.has_value())
+                {
+                    newChatName = currentChatName.value();
+                }
             }
-        }
 
-        // Input parameters for processing the input
-        auto processInput = [](const std::string& input) {
-            Chat::ChatManager::getInstance().renameCurrentChat(input);
-            ImGui::CloseCurrentPopup();
-            newChatName.clear(); // Safely clear the string
+            // Input field
+            auto processInput = [](const std::string &input)
+            {
+                Chat::ChatManager::getInstance().renameCurrentChat(input);
+                ImGui::CloseCurrentPopup();
+                newChatName.clear();
             };
 
-        InputFieldConfig inputConfig(
-            "##newchatname",            // ID
-            ImVec2(250, 0),             // Size
-            newChatName,                // Input text buffer
-            focusNewChatName);          // Focus
-        inputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue;
-        inputConfig.processInput = processInput;
-        inputConfig.frameRounding = 5.0F;
-        InputField::render(inputConfig);
+            InputFieldConfig inputConfig(
+                "##newchatname",
+                ImVec2(ImGui::GetWindowSize().x - 32.0F, 0),
+                newChatName,
+                focusNewChatName);
+            inputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue;
+            inputConfig.processInput = processInput;
+            inputConfig.frameRounding = 5.0F;
+            InputField::render(inputConfig);
+        },
+        showRenameChatDialog
+    };
+    modalConfig.padding = ImVec2(16.0F, 8.0F);
 
-        ImGui::Spacing();
+    ModalWindow::render(modalConfig);
+}
 
-        // Configure the confirm button
-        ButtonConfig confirmRename;
-        confirmRename.id = "##confirmRename";
-        confirmRename.label = "Rename";
-        confirmRename.icon = std::nullopt;
-        confirmRename.size = ImVec2(122.5F, 0);
-        confirmRename.onClick = [&]() {
-            Chat::ChatManager::getInstance().renameCurrentChat(newChatName);
-            ImGui::CloseCurrentPopup();
-            newChatName.clear(); // Clear string after renaming
-            };
-        confirmRename.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
-        confirmRename.hoverColor = RGBAToImVec4(53, 132, 228, 255);
-        confirmRename.activeColor = RGBAToImVec4(26, 95, 180, 255);
+inline void renderModelManager(bool &openModal)
+{
+    ImVec2 windowSize = ImGui::GetWindowSize();
+    const float targetWidth = windowSize.x;
 
-        // Configure the cancel button
-        ButtonConfig cancelRename;
-        cancelRename.id = "##cancelRename";
-        cancelRename.label = "Cancel";
-        cancelRename.icon = std::nullopt;
-        cancelRename.size = ImVec2(122.5F, 0);
-        cancelRename.onClick = [&]() {
-            ImGui::CloseCurrentPopup();
-            newChatName.clear(); // Clear string on cancel
-            };
-        cancelRename.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
-        cancelRename.hoverColor = RGBAToImVec4(53, 132, 228, 255);
-        cancelRename.activeColor = RGBAToImVec4(26, 95, 180, 255);
+    // Card constants
+    const float cardWidth = 200;
+    const float cardHeight = 200;
+    const float cardSpacing = 10.0f;
+    const float cardUnit = cardWidth + cardSpacing;
+    const float paddingTotal = 2 * 16.0F; // 16.0F is the default padding value defined in the ModalWindow::render function
 
-        std::vector<ButtonConfig> renameChatDialogButtons = { confirmRename, cancelRename };
-        Button::renderGroup(renameChatDialogButtons, ImGui::GetCursorPosX(), ImGui::GetCursorPosY(), 10);
+    // Calculate number of cards that fit within target width
+    float availableWidth = targetWidth - paddingTotal;
+    int numCards = static_cast<int>(availableWidth / cardUnit);
 
-        ImGui::EndPopup();
+    // Calculate actual modal width
+    float modalWidth = (numCards * cardUnit) + paddingTotal;
+
+    // If we're too far below target width, add one more card
+    if (targetWidth - modalWidth > cardUnit * 0.5f)
+    {
+        numCards++;
+        modalWidth = (numCards * cardUnit) + paddingTotal;
     }
 
-    // Revert to the previous style
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar();
+    ImVec2 modalSize = ImVec2(modalWidth, windowSize.y * 0.9F);
+
+    ModalConfig modalConfig{
+        "Model Manager",
+        "Model Manager",
+        modalSize,
+        [numCards, cardSpacing, cardWidth, cardHeight, targetWidth]()
+        {
+            std::vector<Model::ModelData> models = Model::ModelManager::getInstance().getModels();
+            static std::vector<std::string> modelVariants;
+            if (modelVariants.empty())
+            {
+                for (int8_t i = 0; i < models.size(); i++)
+                {
+                    modelVariants.push_back("4-bit Quantized");
+                }
+            }
+
+            for (size_t i = 0; i < models.size(); i++)
+            {
+                // Start new row
+                if (i % numCards == 0)
+                {
+                    ImGui::SetCursorPos(ImVec2(16.0F, ImGui::GetCursorPosY() + (i > 0 ? cardSpacing : 0)));
+                }
+
+                ImGui::BeginGroup();
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, RGBAToImVec4(26, 26, 26, 255));
+                ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0F);
+
+                ImGui::BeginChild(("ModelCard" + std::to_string(i)).c_str(),
+                                  ImVec2(cardWidth, cardHeight), true);
+
+                // Render author label
+                LabelConfig modelAuthorLabel;
+                modelAuthorLabel.id = "##modelAuthor" + std::to_string(i);
+                modelAuthorLabel.label = "Meta";
+                modelAuthorLabel.size = ImVec2(0, 0);
+                modelAuthorLabel.fontType = FontsManager::ITALIC;
+                modelAuthorLabel.alignment = Alignment::LEFT;
+                modelAuthorLabel.fontSize = FontsManager::SM;
+                Label::render(modelAuthorLabel);
+
+                // Get the height of the author label
+                float authorLabelHeight = ImGui::GetTextLineHeightWithSpacing();
+
+                // Render model name label
+                LabelConfig modelNameLabel;
+                modelNameLabel.id = "##modelName" + std::to_string(i);
+                modelNameLabel.label = models[i].name;
+                modelNameLabel.size = ImVec2(0, 0);
+                modelNameLabel.fontType = FontsManager::BOLD;
+                modelNameLabel.alignment = Alignment::LEFT;
+                Label::render(modelNameLabel);
+
+                // Get the height of the model name label
+                float modelNameLabelHeight = ImGui::GetTextLineHeightWithSpacing();
+
+                // Calculate the total height of the labels
+                float totalLabelHeight = authorLabelHeight + modelNameLabelHeight;
+
+                // add left padding
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 4.0f);
+
+                // TODO: Check button rect size is bigger when no icon is present
+                //       make sure to adjust the size of the button accordingly                
+                ButtonConfig use4bitButton;
+                use4bitButton.id = "##use4bit" + std::to_string(i);
+                if (modelVariants[i] == "4-bit Quantized")
+                {
+                    use4bitButton.icon = ICON_CI_CHECK;
+                }
+                else
+                {
+                    // TODO's workarounds for the button size issue
+                    use4bitButton.icon = ICON_CI_CLOSE;
+                    use4bitButton.textColor = RGBAToImVec4(34, 34, 34, 255);
+                }
+                use4bitButton.fontSize = FontsManager::SM;
+                use4bitButton.size = ImVec2(24, 0);
+                use4bitButton.backgroundColor = RGBAToImVec4(34, 34, 34, 255);
+                use4bitButton.onClick = [i]()
+                {
+                    if (modelVariants[i] == "4-bit Quantized")
+                    {
+                        modelVariants[i] = "Full Precision";
+                    }
+                    else
+                    {
+                        modelVariants[i] = "4-bit Quantized";
+                    }
+                };
+                Button::render(use4bitButton);
+
+                // Get the height of the quantization checkbox button
+                float quantizationHeight = ImGui::GetTextLineHeightWithSpacing();
+
+                ImGui::SameLine(0.0f, 4.0f);
+
+                // Render labels
+                LabelConfig quantizationLabel;
+                quantizationLabel.id = "##quantization" + std::to_string(i);
+                quantizationLabel.label = "Use 4-bit quantization";
+                quantizationLabel.size = ImVec2(0, 0);
+                quantizationLabel.fontType = FontsManager::REGULAR;
+                quantizationLabel.fontSize = FontsManager::SM;
+                quantizationLabel.alignment = Alignment::LEFT;
+                float labelOffsetY = (use4bitButton.size.y - ImGui::GetTextLineHeight()) / 4.0f + 2.0f;
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + labelOffsetY);
+                Label::render(quantizationLabel);
+
+                // Render select button at the bottom of the card
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cardHeight - totalLabelHeight - quantizationHeight * 3 - 10));
+
+                bool isSelected = models[i].name == Model::ModelManager::getInstance().getCurrentModelName();
+                bool isDownloaded = Model::ModelManager::getInstance().isModelDownloaded(i, modelVariants[i]);
+
+                ButtonConfig selectButton;
+                selectButton.size = ImVec2(cardWidth - 18, 0);
+
+                if (!isDownloaded)
+                {
+                    selectButton.id = "##download" + std::to_string(i);
+                    selectButton.label = "Download";
+                    selectButton.backgroundColor = RGBAToImVec4(26, 95, 180, 255);
+                    selectButton.hoverColor = RGBAToImVec4(53, 132, 228, 255);
+                    selectButton.activeColor = RGBAToImVec4(26, 95, 180, 255);
+                    selectButton.icon = ICON_CI_CLOUD_DOWNLOAD;
+                    selectButton.borderSize = 1.0F;
+
+                    selectButton.onClick = [i, models]()
+                    {
+                        Model::ModelManager::getInstance().downloadModel(i, modelVariants[i]);
+                    };
+
+                    if (Model::ModelManager::getInstance().getModelDownloadProgress(i, modelVariants[i]) > 0.0)
+                    {
+                        selectButton.label = "Downloading";
+                        selectButton.icon = ICON_CI_CLOUD_DOWNLOAD;
+                        selectButton.state = ButtonState::DISABLED;
+
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - quantizationHeight - 6);
+
+                        // Add a progress bar
+                        ImGui::ProgressBar(
+                            Model::ModelManager::getInstance().getModelDownloadProgress(i, modelVariants[i]) / 100.0,
+                            ImVec2(cardWidth - 18, 0));
+                    }
+                }
+                else
+                {
+                    selectButton.id = "##select" + std::to_string(i);
+                    selectButton.label = isSelected ? "selected" : "select";
+                    selectButton.backgroundColor = RGBAToImVec4(34, 34, 34, 255);
+                    if (isSelected)
+                    {
+                        selectButton.icon = ICON_CI_PASS;
+                        selectButton.borderColor = RGBAToImVec4(172, 131, 255, 255 / 4);
+                        selectButton.borderSize = 1.0F;
+                        selectButton.state = ButtonState::ACTIVE;
+                    }
+
+                    selectButton.onClick = [i, models]()
+                    {
+                        Model::ModelManager::getInstance().switchModel(
+                            models[i].name,
+                            modelVariants[i]
+                        );
+                    };
+                }
+
+                Button::render(selectButton);
+
+                ImGui::EndChild();
+
+                if (ImGui::IsItemHovered() || isSelected)
+                {
+                    ImVec2 min = ImGui::GetItemRectMin();
+                    ImVec2 max = ImGui::GetItemRectMax();
+                    ImU32 borderColor = IM_COL32(172, 131, 255, 255 / 2);
+                    ImGui::GetWindowDrawList()->AddRect(
+                        min, max, borderColor, 8.0f, 0, 1.0f);
+                }
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+
+                ImGui::EndGroup();
+
+                if ((i + 1) % numCards != 0 && i < models.size() - 1)
+                {
+                    ImGui::SameLine(0.0f, cardSpacing);
+                }
+            }
+        },
+        openModal};
+
+    ModalWindow::render(modalConfig);
 }
 
 inline void renderChatFeatureButtons(const float startX = 0, const float startY = 0)
@@ -288,12 +468,16 @@ inline void renderChatFeatureButtons(const float startX = 0, const float startY 
     // Configure the button
     std::vector<ButtonConfig> buttons;
 
+    std::string currentModelName = Model::ModelManager::getInstance().getCurrentModelName().value_or("Select Model");
+
     ButtonConfig openModelManager;
     openModelManager.id = "##openModalButton";
-    openModelManager.label = "Open Modal";
-    openModelManager.size = ImVec2(100, 0);
+    openModelManager.label = currentModelName;
+    openModelManager.icon = ICON_CI_SPARKLE;
+    openModelManager.size = ImVec2(128, 0);
     openModelManager.alignment = Alignment::LEFT;
-    openModelManager.onClick = [&]() { openModal = true; };
+    openModelManager.onClick = [&]()
+    { openModal = true; };
 
     buttons.push_back(openModelManager);
 
@@ -301,106 +485,7 @@ inline void renderChatFeatureButtons(const float startX = 0, const float startY 
     Button::renderGroup(buttons, startX, startY);
 
     // Open the modal window if the button was clicked
-    if (openModal)
-    {
-        ImGui::OpenPopup("MyModal");
-        openModal = false;
-    }
-
-    ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg, ImVec4(0.0F, 0.0F, 0.0F, 0.5F));
-
-    ImVec2 windowSize = ImGui::GetWindowSize();
-    ImVec2 modalSize = ImVec2(windowSize.x * 0.9F, windowSize.y * 0.9F);
-
-    // Center the modal window
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(modalSize);
-
-    // Render the modal window
-    if (ImGui::BeginPopupModal("MyModal", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar))
-    {
-        // Add X button in top-right corner
-        float xButtonSize = 32.0f;
-        float padding = 10.0f;
-        ImVec2 windowSize = ImGui::GetWindowSize();
-
-        // Save cursor pos
-        ImVec2 originalPos = ImGui::GetCursorPos();
-
-        ButtonConfig closeButton;
-        closeButton.id = "##closeModal";
-        closeButton.label = "X";
-        closeButton.size = ImVec2(xButtonSize, xButtonSize);
-        closeButton.onClick = []() { ImGui::CloseCurrentPopup(); };
-
-        std::vector<ButtonConfig> closeButtons = { closeButton };
-        Button::renderGroup(closeButtons, windowSize.x - xButtonSize - 16, 16);
-
-        // Restore cursor position
-        ImGui::SetCursorPos(ImVec2(originalPos.x + 16, originalPos.y + 16));
-
-        LabelConfig modalTitle;
-        modalTitle.id = "##modalTitle";
-        modalTitle.label = "Model Manager";
-        modalTitle.size = ImVec2(0, 0);
-		modalTitle.fontType = FontsManager::BOLD;
-        modalTitle.alignment = Alignment::LEFT;
-        Label::render(modalTitle);
-
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::Spacing();
-
-        // start content
-
-        {
-            // Create a card for a model
-            ImGui::BeginGroup();
-
-            // Set the card background color
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, RGBAToImVec4(37, 37, 37, 255));
-
-            // Set the card border rounding
-            ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0F);
-
-            ImGui::BeginChild("ModelCard", ImVec2(200, 200), true);
-
-            // Render the model card content
-            ImGui::Text("meta-llama/Llama-3.2-1B");
-            ImGui::Text("Model Description");
-
-            ImGui::EndChild();
-
-			if (ImGui::IsItemHovered())
-			{
-                // Push a new style color for the border
-                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0F, 1.0F, 1.0F, 1.0F)); // White border
-                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F); // Border size
-
-                // Draw the border
-                ImGui::RenderFrameBorder(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), 8.0F);
-
-                // Pop the style color and var
-                ImGui::PopStyleVar();
-                ImGui::PopStyleColor();
-			}
-
-            ImGui::PopStyleVar();
-            ImGui::PopStyleColor();
-
-            ImGui::EndGroup();
-        }
-
-        ImGui::EndPopup();
-    }
-
-    ImGui::PopStyleColor();
+    renderModelManager(openModal);
 }
 
 inline void renderInputField(const float inputHeight, const float inputWidth)
@@ -412,46 +497,46 @@ inline void renderInputField(const float inputHeight, const float inputWidth)
     ImVec2 inputSize = ImVec2(inputWidth, inputHeight);
 
     // Define a lambda to process the submitted input
-    auto processInput = [&](const std::string& input)
+    auto processInput = [&](const std::string &input)
+    {
+        auto &chatManager = Chat::ChatManager::getInstance();
+        auto currentChat = chatManager.getCurrentChat();
+
+        // Check if we have a current chat
+        if (!currentChat.has_value())
         {
-            auto& chatManager = Chat::ChatManager::getInstance();
-            auto currentChat = chatManager.getCurrentChat();
+            throw std::runtime_error("No chat available to send message to");
+        }
 
-            // Check if we have a current chat
-            if (!currentChat.has_value())
-            {
-                throw std::runtime_error("No chat available to send message to");
-            }
+        // Handle user message
+        {
+            Chat::Message userMessage;
+            userMessage.id = static_cast<int>(currentChat.value().messages.size()) + 1;
+            userMessage.role = "user";
+            userMessage.content = input;
 
-            // Handle user message
-            {
-                Chat::Message userMessage;
-                userMessage.id = static_cast<int>(currentChat.value().messages.size()) + 1;
-                userMessage.role = "user";
-                userMessage.content = input;
+            // Add message directly to current chat
+            chatManager.addMessageToCurrentChat(userMessage);
+        }
 
-                // Add message directly to current chat
-                chatManager.addMessageToCurrentChat(userMessage);
-            }
+        // Handle assistant response
+        // TODO: Implement assistant response through callback
+        {
+            Chat::Message assistantMessage;
+            assistantMessage.id = static_cast<int>(currentChat.value().messages.size()) + 2;
+            assistantMessage.role = "assistant";
+            assistantMessage.content = "Hello! I am an assistant. How can I help you today?";
 
-            // Handle assistant response
-            // TODO: Implement assistant response through callback
-            {
-                Chat::Message assistantMessage;
-                assistantMessage.id = static_cast<int>(currentChat.value().messages.size()) + 2;
-                assistantMessage.role = "assistant";
-                assistantMessage.content = "Hello! I am an assistant. How can I help you today?";
-
-                chatManager.addMessageToCurrentChat(assistantMessage);
-            }
-        };
+            chatManager.addMessageToCurrentChat(assistantMessage);
+        }
+    };
 
     // input field settings
     InputFieldConfig inputConfig(
-        "##chatinput",	  													      // ID
-        ImVec2(inputSize.x, inputSize.y - Config::Font::DEFAULT_FONT_SIZE - 20),  // Size (excluding button height)
-        inputTextBuffer,  														  // Input text buffer
-        focusInputField); 														  // Focus
+        "##chatinput",                                                           // ID
+        ImVec2(inputSize.x, inputSize.y - Config::Font::DEFAULT_FONT_SIZE - 20), // Size (excluding button height)
+        inputTextBuffer,                                                         // Input text buffer
+        focusInputField);                                                        // Focus
     {
         inputConfig.placeholderText = "Type a message and press Enter to send (Ctrl+Enter or Shift+Enter for new line)";
         inputConfig.flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CtrlEnterForNewLine | ImGuiInputTextFlags_ShiftEnterForNewLine;
@@ -460,14 +545,14 @@ inline void renderInputField(const float inputHeight, const float inputWidth)
 
     // Set background color and create child window
     ImVec2 screenPos = ImGui::GetCursorScreenPos();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImDrawList *drawList = ImGui::GetWindowDrawList();
 
     // Draw background rectangle
     drawList->AddRectFilled(
         screenPos,
         ImVec2(screenPos.x + inputWidth, screenPos.y + inputHeight),
         ImGui::ColorConvertFloat4ToU32(Config::InputField::INPUT_FIELD_BG_COLOR),
-        Config::InputField::FRAME_ROUNDING  // corner rounding
+        Config::InputField::FRAME_ROUNDING // corner rounding
     );
 
     ImGui::BeginGroup();
@@ -491,7 +576,7 @@ inline void renderInputField(const float inputHeight, const float inputWidth)
 
 inline void renderChatWindow(float inputHeight, float leftSidebarWidth, float rightSidebarWidth)
 {
-    ImGuiIO& imguiIO = ImGui::GetIO();
+    ImGuiIO &imguiIO = ImGui::GetIO();
 
     // Calculate the size of the chat window based on the sidebar width
     ImVec2 windowSize = ImVec2(imguiIO.DisplaySize.x - rightSidebarWidth - leftSidebarWidth, imguiIO.DisplaySize.y - Config::TITLE_BAR_HEIGHT);
@@ -501,10 +586,10 @@ inline void renderChatWindow(float inputHeight, float leftSidebarWidth, float ri
     ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
 
     ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar |
-        ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove |
-        ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
+                                   ImGuiWindowFlags_NoResize |
+                                   ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoCollapse |
+                                   ImGuiWindowFlags_NoBringToFrontOnFocus;
     // Remove window border
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0F);
 
@@ -530,9 +615,9 @@ inline void renderChatWindow(float inputHeight, float leftSidebarWidth, float ri
     renameButtonConfig.size = ImVec2(renameButtonWidth, 30);
     renameButtonConfig.gap = 10.0F;
     renameButtonConfig.onClick = []()
-        {
-            showRenameChatDialog = true;
-        };
+    {
+        showRenameChatDialog = true;
+    };
     renameButtonConfig.alignment = Alignment::CENTER;
     renameButtonConfig.hoverColor = ImVec4(0.1F, 0.1F, 0.1F, 0.5F);
     Button::render(renameButtonConfig);

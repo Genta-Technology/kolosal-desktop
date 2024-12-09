@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include "model_preset.hpp"
-#include "preset_observer.hpp"
 #include "preset_persistence.hpp"
 
 #include <vector>
@@ -57,13 +55,6 @@ namespace Model
             m_currentPresetName = std::nullopt;
             m_currentPresetIndex = 0;
             loadPresetsAsync();
-        }
-
-        // Observer pattern methods
-        void addObserver(std::weak_ptr<IPresetObserver> observer)
-        {
-            std::unique_lock<std::shared_mutex> lock(m_mutex);
-            m_observers.push_back(observer);
         }
 
         // Preset management methods
@@ -467,7 +458,6 @@ namespace Model
         std::vector<ModelPreset> m_originalPresets;
         std::unordered_map<std::string, size_t> m_presetNameToIndex;
         std::set<PresetIndex> m_sortedIndices;
-        std::vector<std::weak_ptr<IPresetObserver>> m_observers;
         std::optional<std::string> m_currentPresetName;
         size_t m_currentPresetIndex;
     };

@@ -3,7 +3,6 @@
 #pragma once
 
 #include "chat_persistence.hpp"
-#include "chat_observer.hpp"
 
 #include <vector>
 #include <string>
@@ -154,13 +153,6 @@ namespace Chat
             std::async(std::launch::async, [this, chat]() {
                 m_persistence->saveChat(chat);
             });
-        }
-
-        // Observer pattern methods
-        void addObserver(std::weak_ptr<IChatObserver> observer) 
-        {
-            std::unique_lock<std::shared_mutex> lock(m_mutex);
-            m_observers.push_back(observer);
         }
 
         // Async operations
@@ -332,7 +324,6 @@ namespace Chat
         explicit ChatManager(std::unique_ptr<IChatPersistence> persistence)
             : m_persistence(std::move(persistence))
             , m_chats()
-            , m_observers()
 			, m_currentChatName(std::nullopt)
 			, m_currentChatIndex(0)
 			, m_chatNameToIndex()
@@ -450,27 +441,10 @@ namespace Chat
             m_currentChatIndex = 0;
         }
 
-        //template<typename F>
-        //void notifyObservers(F&& notification) 
-        //{
-        //    std::vector<std::weak_ptr<IChatObserver>> observers;
-        //    {
-        //        std::shared_lock<std::shared_mutex> lock(m_mutex);
-        //        observers = m_observers;
-        //    }
-
-        //    for (auto& weakObs : observers) {
-        //        if (auto obs = weakObs.lock()) {
-        //            notification(obs);
-        //        }
-        //    }
-        //}
-
         static inline const std::string DEFAULT_CHAT_NAME = "New Chat";
 
         std::unique_ptr<IChatPersistence> m_persistence;
         std::vector<ChatHistory> m_chats;
-        std::vector<std::weak_ptr<IChatObserver>> m_observers;
         std::unordered_map<std::string, size_t> m_chatNameToIndex;
         std::set<ChatIndex> m_sortedIndices;
         std::optional<std::string> m_currentChatName;
