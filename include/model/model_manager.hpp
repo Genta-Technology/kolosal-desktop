@@ -52,9 +52,18 @@ namespace Model
 
             // If not downloaded, start download
             ModelVariant *variant = getVariantLocked(m_currentModelIndex, m_currentVariantType);
-            if (variant && !variant->isDownloaded && variant->downloadProgress == 0.0)
+            if (variant)
             {
-                startDownloadAsyncLocked(m_currentModelIndex, m_currentVariantType);
+                if (!variant->isDownloaded && variant->downloadProgress == 0.0)
+                {
+                    startDownloadAsyncLocked(m_currentModelIndex, m_currentVariantType);
+                }
+                else
+                {
+                    // Update lastSelected
+                    variant->lastSelected = static_cast<int>(std::time(nullptr));
+                    m_persistence->saveModelData(m_models[m_currentModelIndex]);
+                }
             }
 
             return true;
@@ -137,7 +146,8 @@ namespace Model
             loadModelsAsync();
         }
 
-        void loadModelsAsync() {
+        void loadModelsAsync() 
+        {
             std::async(std::launch::async, [this]() {
                 auto models = m_persistence->loadAllModels().get();
 
@@ -157,36 +167,38 @@ namespace Model
                     m_modelNameToIndex[m_models[i].name] = i;
                 }
 
-                // Find the first model that is already downloaded (either variant)
-                bool anyDownloaded = false;
-                for (size_t i = 0; i < m_models.size(); ++i) 
+                // Find the model variant with the highest lastSelected value
+                int maxLastSelected = -1;
+                size_t selectedModelIndex = 0;
+                std::string selectedVariantType;
+
+                for (size_t i = 0; i < m_models.size(); ++i)
                 {
                     const auto& model = m_models[i];
-                    if (model.fullPrecision.isDownloaded) 
+                    const ModelVariant* variants[] = { &model.quantized4Bit, &model.fullPrecision };
+
+                    for (const ModelVariant* variant : variants)
                     {
-                        m_currentModelName = model.name;
-                        m_currentModelIndex = i;
-                        m_currentVariantType = "Full Precision";
-                        anyDownloaded = true;
-                        break;
-                    } 
-                    else if (model.quantized4Bit.isDownloaded) 
-                    {
-                        m_currentModelName = model.name;
-                        m_currentModelIndex = i;
-                        m_currentVariantType = "4-bit Quantized";
-                        anyDownloaded = true;
-                        break;
+                        if (variant->isDownloaded && variant->lastSelected > maxLastSelected)
+                        {
+                            maxLastSelected = variant->lastSelected;
+                            selectedModelIndex = i;
+                            selectedVariantType = variant->type;
+                        }
                     }
                 }
 
-                // If no model is downloaded at start, no model is selected
-                if (!anyDownloaded) 
+                if (maxLastSelected >= 0)
                 {
+                    m_currentModelName = m_models[selectedModelIndex].name;
+                    m_currentModelIndex = selectedModelIndex;
+                    m_currentVariantType = selectedVariantType;
+                }
+                else
+                {
+                    // If no model has been selected before, fallback to default behavior
                     m_currentModelName = std::nullopt;
                     m_currentVariantType.clear();
-                    // We can leave m_currentModelIndex as-is or reset it. 
-                    // Since no model is selected, it won't be used.
                     m_currentModelIndex = 0;
                 }
             });
@@ -203,6 +215,15 @@ namespace Model
                     variant.isDownloaded = false;
                     variant.downloadProgress = 0.0;
                 }
+
+                return;
+            }
+            
+            // if variant is not downloaded, but file exists, set isDownloaded to true
+            if (std::filesystem::exists(variant.path)) 
+            {
+                variant.isDownloaded = true;
+                variant.downloadProgress = 100.0;
             }
         }
 

@@ -15,17 +15,20 @@ namespace Model
         std::string downloadLink;
         bool isDownloaded;
         double downloadProgress; // 0.0 to 100.0
+        int lastSelected;
 
         ModelVariant(const std::string &type = "",
                      const std::string &path = "",
                      const std::string &downloadLink = "",
                      bool isDownloaded = false,
-                     double downloadProgress = 0.0)
-            : type(type),
-              path(path),
-              downloadLink(downloadLink),
-              isDownloaded(isDownloaded),
-              downloadProgress(downloadProgress) {}
+                     double downloadProgress = 0.0,
+                     int lastSelected = 0)
+            : type(type)
+            , path(path)
+            , downloadLink(downloadLink)
+            , isDownloaded(isDownloaded)
+            , downloadProgress(downloadProgress)
+            , lastSelected(lastSelected) {}
     };
 
     inline void to_json(nlohmann::json &j, const ModelVariant &v)
@@ -35,7 +38,8 @@ namespace Model
             {"path", v.path},
             {"downloadLink", v.downloadLink},
             {"isDownloaded", v.isDownloaded},
-            {"downloadProgress", v.downloadProgress}};
+            {"downloadProgress", v.downloadProgress},
+            {"lastSelected", v.lastSelected}};
     }
 
     inline void from_json(const nlohmann::json &j, ModelVariant &v)
@@ -45,6 +49,7 @@ namespace Model
         j.at("downloadLink").get_to(v.downloadLink);
         j.at("isDownloaded").get_to(v.isDownloaded);
         j.at("downloadProgress").get_to(v.downloadProgress);
+        j.at("lastSelected").get_to(v.lastSelected);
     }
 
     struct ModelData
@@ -56,9 +61,9 @@ namespace Model
         ModelData(const std::string &name = "",
                   const ModelVariant &fullPrecision = ModelVariant(),
                   const ModelVariant &quantized4Bit = ModelVariant())
-            : name(name),
-              fullPrecision(fullPrecision),
-              quantized4Bit(quantized4Bit) {}
+            : name(name)
+            , fullPrecision(fullPrecision)
+            , quantized4Bit(quantized4Bit) {}
     };
 
     inline void to_json(nlohmann::json &j, const ModelData &m)

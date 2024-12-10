@@ -275,6 +275,12 @@ inline void renderModelManager(bool &openModal)
             {
                 for (int8_t i = 0; i < models.size(); i++)
                 {
+                    if (models[i].name == Model::ModelManager::getInstance().getCurrentModelName())
+                    {
+                        modelVariants.push_back(Model::ModelManager::getInstance().getCurrentVariantType());
+                        continue;
+                    }
+
                     modelVariants.push_back("4-bit Quantized");
                 }
             }
@@ -342,7 +348,7 @@ inline void renderModelManager(bool &openModal)
                 use4bitButton.fontSize = FontsManager::SM;
                 use4bitButton.size = ImVec2(24, 0);
                 use4bitButton.backgroundColor = RGBAToImVec4(34, 34, 34, 255);
-                use4bitButton.onClick = [i]()
+                use4bitButton.onClick = [i, models]()
                 {
                     if (modelVariants[i] == "4-bit Quantized")
                     {
@@ -375,7 +381,8 @@ inline void renderModelManager(bool &openModal)
                 // Render select button at the bottom of the card
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cardHeight - totalLabelHeight - quantizationHeight * 3 - 10));
 
-                bool isSelected = models[i].name == Model::ModelManager::getInstance().getCurrentModelName();
+                bool isSelected = models[i].name == Model::ModelManager::getInstance().getCurrentModelName() &&
+                                  modelVariants[i] == Model::ModelManager::getInstance().getCurrentVariantType();
                 bool isDownloaded = Model::ModelManager::getInstance().isModelDownloaded(i, modelVariants[i]);
 
                 ButtonConfig selectButton;
